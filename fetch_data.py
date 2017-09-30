@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import zeep
 import json
 import sqlite3
