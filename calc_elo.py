@@ -2,9 +2,27 @@ import sqlite3
 from collections import defaultdict
 
 
+def _check_if_table_exists(cursor, name):
+    cursor.execute("select count(*) from sqlite_master "
+                   "where type='table' and name=(?)", (name,))
+    result = cursor.fetchone()
+    return result[0] != 0
+
+
+def _create_elo_table(cursor):
+    cursor.execute((
+        'create table elo ('
+        'match_id integer'
+        'player1_elo integer, '
+        'player2_elo integer, '
+        'foreign key(match_id) references matches(id))'
+    ))
+    cursor.fetchone()
+
+
 def _iterate_match(database):
     cursor = database.cursor()
-    cursor.execute('select * from matches')
+    cursor.execute('select * from matches order by date asc, id asc')
     for match in cursor:
         match_id = match[0]
         match_played = not match[6]
@@ -70,19 +88,9 @@ def _get_probs_post(match_data):
     return probs_post
 
 
-def _calc_players_elo(players_data, match_data):
-    start_elo = _get_start_elo()
-
-    player1_data = players_data[match_data['player1_id']]
-    player1_elo = player1_data[-1][1] if len(player1_data) else start_elo
-
-    player2_data = players_data[match_data['player2_id']]
-    player2_elo = player2_data[-1][1] if len(player2_data) else start_elo
-
+def _calc_players_elo(player1_matches_num, player1_elo,
+                      player2_matches_num, player2_elo, match_data):
     if match_data['score']:
-        player1_matches_num = len(player1_data)
-        player2_matches_num = len(player2_data)
-
         player1_prob_pre, player2_prob_pre = _get_probs_pre(player1_elo,
                                                             player2_elo)
         player1_prob_post, player2_prob_post = _get_probs_post(match_data)
@@ -112,13 +120,29 @@ def _calc_players_elo(players_data, match_data):
 
 
 def _calc_elos(database):
-    players = defaultdict(list)
+    import ipdb; ipdb.set_trace()
+    cursor = database.cursor()
+    _create_elo_table(cursor)
+    players = defaultdict(lambda: (0, _get_start_elo()))
     for match_id, match_data in _iterate_match(database):
         player1_id = match_data['player1_id']
         player2_id = match_data['player2_id']
-        player1_elo, player2_elo = _calc_players_elo(players, match_data)
-        players[player1_id].append((match_id, player1_elo))
-        players[player2_id].append((match_id, player2_elo))
+        player1_matches_num, player1_elo = players[player1_id]
+        player2_matches_num, player2_elo = players[player2_id]
+
+        new_elos = _calc_players_elo(player1_matches_num, player1_elo,
+                                     player2_matches_num, player2_elo,
+                                     match_data)
+        player1_elo, player2_elo = new_elos
+
+        match_played = match_data['score'] is not None
+        players[player1_id] = (player1_matches_num + int(match_played),
+                               player1_elo)
+        players[player2_id] = (player2_matches_num + int(match_played),
+                               player2_elo)
+        cursor.execute('insert into elo values(?, ?, ?)',
+                       (match_id, player1_elo, player2_elo))
+    database.commit()
     import ipdb; ipdb.set_trace()
 
 
