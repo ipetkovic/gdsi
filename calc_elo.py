@@ -1,49 +1,6 @@
-import sqlite3
-from collections import defaultdict
+#!/usr/bin/python
 
-
-def _check_if_table_exists(cursor, name):
-    cursor.execute("select count(*) from sqlite_master "
-                   "where type='table' and name=(?)", (name,))
-    result = cursor.fetchone()
-    return result[0] != 0
-
-
-def _create_elo_table(cursor):
-    cursor.execute((
-        'create table elo ('
-        'match_id integer'
-        'player1_elo integer, '
-        'player2_elo integer, '
-        'foreign key(match_id) references matches(id))'
-    ))
-    cursor.fetchone()
-
-
-def _iterate_match(database):
-    cursor = database.cursor()
-    cursor.execute('select * from matches order by date asc, id asc')
-    for match in cursor:
-        match_id = match[0]
-        match_played = not match[6]
-        if match_played:
-            score = [
-                (match[13], match[16]),
-                (match[14], match[17]),
-            ]
-            if match[15]:
-                score.append((match[15], match[18]))
-        else:
-            score = None
-
-        data = {
-            'winner_id': match[3],
-            'player1_id': match[4],
-            'player2_id': match[5],
-            'score': score
-        }
-
-        yield (match_id, data)
+import database_utils as db_utils
 
 
 def _get_start_elo():
@@ -122,9 +79,20 @@ def _calc_players_elo(player1_matches_num, player1_elo,
 def _calc_elos(database):
     import ipdb; ipdb.set_trace()
     cursor = database.cursor()
-    _create_elo_table(cursor)
-    players = defaultdict(lambda: (0, _get_start_elo()))
-    for match_id, match_data in _iterate_match(database):
+    if db_utils.elo_table_exists(database):
+        result = db_utils.elo_table_get_max_id(database)
+        start_match_id = result + 1 if result else 0
+    else:
+        db_utils.elo_table_create(database)
+
+    # players is dict (keys: player_id) whos values are
+    #   tuple in form (matches_played, current_elo)
+    players = db_utils.elo_table_get_players_data(database)
+    # we want default elo for new player to be _get_start_elo()
+    players.default_factory = lambda: (0, _get_start_elo())
+
+    for retval in db_utils.iterate_match_by_date(database, start_match_id):
+        match_id, match_data = retval
         player1_id = match_data['player1_id']
         player2_id = match_data['player2_id']
         player1_matches_num, player1_elo = players[player1_id]
@@ -140,15 +108,13 @@ def _calc_elos(database):
                                player1_elo)
         players[player2_id] = (player2_matches_num + int(match_played),
                                player2_elo)
-        cursor.execute('insert into elo values(?, ?, ?)',
-                       (match_id, player1_elo, player2_elo))
+        db_utils.elo_table_insert_row(database, match_id,
+                                      player1_elo, player2_elo)
     database.commit()
-    import ipdb; ipdb.set_trace()
 
 
 def run():
-    import ipdb; ipdb.set_trace()
-    db = sqlite3.Connection('gdsi.db')
+    db = db_utils.load_database()
     _calc_elos(db)
 
 

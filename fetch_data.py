@@ -2,34 +2,13 @@
 
 import zeep
 import json
-import sqlite3
 import re
+
+import database_utils as db_utils
 
 
 _DATE_PATTERN = re.compile('/Date\((\d+)\)/')
-
-
-def _get_database_name():
-    return 'gdsi.db'
-
-
-def _check_if_table_exists(cursor, name):
-    cursor.execute("select count(*) from sqlite_master "
-                   "where type='table' and name=(?)", (name,))
-    result = cursor.fetchone()
-    return result[0] != 0
-
-
-def _get_max_id(cursor, table_name):
-    cursor.execute('select max(id) from {}'.format(table_name))
-    result = cursor.fetchone()[0]
-    return result
-
-
-def _create_player_table(cursor):
-    cursor.execute(('create table players (id integer primary key, '
-                   'name text not null)'))
-    cursor.fetchone()
+_WSDL_LINK = 'http://tenisliga.com/ws/public.asmx?WSDL'
 
 
 def _get_players_info(soap_client, player_id_start):
@@ -37,38 +16,18 @@ def _get_players_info(soap_client, player_id_start):
 
 
 def _update_player_table(db, soap_client):
-    cursor = db.cursor()
-    if not _check_if_table_exists(cursor, 'players'):
-        _create_player_table(cursor)
+    if not db_utils.players_table_exists(db):
+        db_utils.players_table_create(db)
         next_id = 0
     else:
-        result = _get_max_id(cursor, 'players')
+        result = db_utils.players_table_get_max_id(db)
         next_id = result + 1 if result else 0
 
     players_data = _get_players_info(soap_client, next_id)
     for player_data in players_data:
-        cursor.execute('insert into players values(?, ?)',
-                       (player_data['IgracId'], player_data['ImePrezime']))
+        db_utils.players_table_insert_row(db, player_data['IgracId'],
+                                          player_data['ImePrezime'])
     db.commit()
-
-
-def _create_matches_table(cursor):
-    cursor.execute(('create table matches (id integer primary key, '
-                    'league_id integer, season_id integer, winner_id integer, '
-                    'player1_id integer, player2_id integer, '
-                    'not_played integer, not_played_reason text, '
-                    'date integer, location text, '
-                    'reported_id integer, reserved_id integer, '
-                    'quality_balls integer, '
-                    'player1_set1 integer, player1_set2 integer, '
-                    'player1_set3 integer, player2_set1 integer, '
-                    'player2_set2 integer, player2_set3 integer, '
-                    'foreign key(winner_id) references players(id), '
-                    'foreign key(player1_id) references players(id), '
-                    'foreign key(player2_id) references players(id), '
-                    'foreign key(reported_id) references players(id), '
-                    'foreign key(reserved_id) references players(id))'))
-    cursor.fetchone()
 
 
 def _get_match_info_partial(client, start_id):
@@ -92,6 +51,7 @@ def _form_match_data(metadata, players):
     else:
         quality_balls = None
 
+    # this should match the order of matches table columns
     match_data = (
         metadata['SusretId'],
         metadata['LigaId'],
@@ -135,23 +95,21 @@ def _get_match_data(client, match_id_start):
 
 
 def _update_matches_table(db, client):
-    cursor = db.cursor()
-    if not _check_if_table_exists(cursor, 'matches'):
-        _create_matches_table(cursor)
+    if not db_utils.matches_table_exists(db):
+        db_utils.matches_table_create(db)
         next_id = 0
     else:
-        result = _get_max_id(cursor, 'matches')
+        result = db_utils.matches_table_get_max_id(db)
         next_id = result + 1 if result else 0
-    insert_query = 'insert into matches values({})'.format(','.join('?' * 19))
     for data in _get_match_data(client, next_id):
-        cursor.execute(insert_query, data)
+        db_utils.matches_table_insert_row(db, data)
     db.commit()
 
 
 def run():
-    wsdl = 'http://tenisliga.com/ws/public.asmx?WSDL'
-    soap_client = zeep.Client(wsdl=wsdl)
-    db = sqlite3.Connection(_get_database_name())
+    soap_client = zeep.Client(wsdl=_WSDL_LINK)
+    db = db_utils.load_database()
+    import ipdb; ipdb.set_trace()
     _update_player_table(db, soap_client)
     _update_matches_table(db, soap_client)
 
