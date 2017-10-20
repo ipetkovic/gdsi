@@ -1,3 +1,4 @@
+import os.path
 from collections import defaultdict
 import datetime
 import sqlite3
@@ -7,7 +8,8 @@ _DATABASE_NAME = 'gdsi.db'
 
 
 def load_database():
-    db = sqlite3.Connection(_DATABASE_NAME)
+    database_path = os.path.join(os.path.dirname(__file__), _DATABASE_NAME)
+    db = sqlite3.Connection(database_path)
     return db
 
 
@@ -44,6 +46,15 @@ def players_table_get_max_id(database):
 def players_table_exists(database):
     cursor = database.cursor()
     return _table_exists(cursor, 'players')
+
+
+def players_table_get(database):
+    table = []
+    if players_table_exists(database):
+        cursor = database.cursor()
+        cursor.execute('select id, name from players order by name;')
+        table = cursor.fetchall()
+    return table
 
 
 _matches_table_columns_idx = {
@@ -179,6 +190,52 @@ def elo_table_get_max_id(database):
 def elo_table_exists(database):
     cursor = database.cursor()
     return _table_exists(cursor, 'elo')
+
+
+def elo_table_get_player_elo(database, player_id):
+    player_id_str = str(player_id)
+    cursor = database.cursor()
+    cursor.execute((
+        'select id, player1_id, player2_id '
+        '    from matches where player1_id == ? or player2_id == ? '
+        '    order by date desc, id desc limit 1;'),
+        (player_id_str, player_id_str)
+    )
+    match_id, player1_id, player2_id = cursor.fetchone()
+
+    query = 'player1_elo'
+    if player_id == player2_id:
+        query = 'player2_elo'
+    cursor.execute(
+        'select %s from elo where match_id == ?;' % query, (str(match_id), )
+    )
+    player_elo = cursor.fetchone()[0]
+    return player_elo
+
+
+def elo_table_iter_player_by_rank(database):
+    cursor = database.cursor()
+    cursor.execute((
+        'SELECT player1_id, name, player1_elo from ('
+        '    SELECT match_id, date, player1_id, player1_elo '
+        '    FROM matches '
+        '    JOIN elo on match_id = matches.id '
+        '    WHERE not_played == 0 '
+        '    UNION '
+        '    SELECT match_id, date, player2_id, player2_elo '
+        '    FROM matches '
+        '    JOIN elo on match_id = matches.id '
+        '    WHERE not_played == 0 '
+        '    ORDER BY match_id asc'
+        ') '
+        'JOIN players '
+        'WHERE player1_id == players.id '
+        'GROUP BY player1_id '
+        'ORDER BY player1_elo DESC;'
+     ))
+    for player in cursor:
+        yield player
+
 
 
 def elo_table_get_players_data(database):

@@ -7,6 +7,15 @@ def _get_start_elo():
     return 1400
 
 
+def get_bet_coeffs(elo1, elo2):
+    win_prob1, win_prob2 = _get_probs_pre(elo1, elo2)
+    return (1/win_prob1, 1/win_prob2)
+
+
+def get_win_probs(elo1, elo2):
+    return _get_probs_pre(elo1, elo2)
+
+
 def _get_probs_pre(elo1, elo2):
     player1_win_prob = 1 / (1 + 10**((elo2 - elo1)/400.0))
     return (player1_win_prob, 1 - player1_win_prob)
