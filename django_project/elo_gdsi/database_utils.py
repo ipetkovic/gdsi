@@ -192,25 +192,92 @@ def elo_table_exists(database):
     return _table_exists(cursor, 'elo')
 
 
+def _get_player_elo_from_match(database, match_id, player_id):
+    cursor = database.cursor()
+    cursor.execute((
+        'select player1_id, player2_id '
+        '    from matches '
+        '    where id == ?;'),
+        (match_id, )
+    )
+    player1_id, player2_id = cursor.fetchone()
+    if player1_id == player_id:
+        query = 'player1_elo'
+    elif player2_id == player_id:
+        query = 'player2_elo'
+    else:
+        assert False, "Wrong player ID"
+
+    cursor.execute(
+        'select %s'
+        '    from elo '
+        '    where match_id == ?;' % query, (str(match_id), )
+    )
+    player_elo = cursor.fetchone()[0]
+    return player_elo
+
+
+def get_opponent_id(database, match_id, player_id):
+    cursor = database.cursor()
+    cursor.execute((
+        'select player1_id, player2_id '
+        '    from matches '
+        '    where id == ?;'),
+        (match_id, )
+    )
+    player1_id, player2_id = cursor.fetchone()
+    if player1_id == player_id:
+        opponent_id = player2_id
+    elif player2_id == player_id:
+        opponent_id = player1_id
+    else:
+        assert False, "Wrong match/player ID"
+
+    return opponent_id
+
+
+def get_player_elo_before_match(database, match_id, player_id):
+    player_id_str = str(player_id)
+    cursor = database.cursor()
+    cursor.execute((
+        'select id'
+        '    from matches '
+        '    where (id < ?) and (player1_id == ? or player2_id == ?) '
+        '    order by date desc, id desc limit 1;'),
+        (match_id, player_id_str, player_id_str)
+    )
+    result = cursor.fetchone()
+    if result:
+        last_match_id = result[0]
+        elo = _get_player_elo_from_match(database, last_match_id, player_id)
+    else:
+        elo = 1400
+
+    return elo
+
+
+def get_player_elo_after_match(database, match_id, player_id):
+    return _get_player_elo_from_match(database, match_id, player_id)
+
+
 def elo_table_get_player_elo(database, player_id):
     player_id_str = str(player_id)
     cursor = database.cursor()
     cursor.execute((
-        'select id, player1_id, player2_id '
-        '    from matches where player1_id == ? or player2_id == ? '
+        'select id'
+        '    from matches '
+        '    where player1_id == ? or player2_id == ? '
         '    order by date desc, id desc limit 1;'),
         (player_id_str, player_id_str)
     )
-    match_id, player1_id, player2_id = cursor.fetchone()
+    result = cursor.fetchone()
+    if result:
+        match_id = result[0]
+        elo = _get_player_elo_from_match(database, match_id, player_id)
+    else:
+        elo = 1400
 
-    query = 'player1_elo'
-    if player_id == player2_id:
-        query = 'player2_elo'
-    cursor.execute(
-        'select %s from elo where match_id == ?;' % query, (str(match_id), )
-    )
-    player_elo = cursor.fetchone()[0]
-    return player_elo
+    return elo
 
 
 def elo_table_iter_player_by_rank(database):
@@ -237,7 +304,6 @@ def elo_table_iter_player_by_rank(database):
         yield player
 
 
-
 def elo_table_get_players_data(database):
     cursor = database.cursor()
     players_data = defaultdict(lambda: (0, 0))
@@ -257,3 +323,34 @@ def elo_table_get_players_data(database):
         players_data[player2_id] = (players_data[player2_id][0] + 1,
                                     player2_elo)
     return players_data
+
+
+def iter_player_matches(database, player_id):
+    cursor = database.cursor()
+    cursor.execute((
+        'select id, player1_id, player1_elo, '
+        'player2_id, player2_elo '
+        'from matches join elo on match_id = matches.id '
+        'where player1_id == ? or player2_id == ? '
+        'order by date asc'
+    ), (player_id, player_id))
+    for match in cursor:
+        match_id = match[0]
+        elo = match[2] if player_id == match[1] else match[4]
+        yield (match_id, elo)
+
+
+def get_player_name_from_id(database, player_id):
+    cursor = database.cursor()
+    cursor.execute('select name from players where id == ?;', (player_id, ))
+    retval = cursor.fetchone()
+    if retval:
+        return retval[0]
+
+
+def get_match_info(database, match_id, key):
+    cursor = database.cursor()
+    cursor.execute('select %s from matches where id == ?' % key, (match_id, ))
+    retval = cursor.fetchone()
+    if retval:
+        return retval[0]
