@@ -198,12 +198,16 @@ def plot_elo_history(request):
                 labels.append(label.to_html())
 
     
-        points = ax.plot(data_frame.ix[:,0], data_frame.ix[:,4], markerfacecolor='r', marker='o')
+        if ax.lines:
+            ax.lines.pop()
+            plugins = mpld3.plugins.get_plugins(figure)
+            plugins.pop(-1)
+        points = ax.plot(data_frame.ix[:,0], data_frame.ix[:,4], color='b', markerfacecolor='r', marker='o')
 
         tooltip = mpld3.plugins.PointHTMLTooltip(points[0], labels,
                                                  voffset=10, hoffset=10, css=_CSS)
-        mpld3.plugins.connect(figure, tooltip)
+        mpld3.plugins.connect(figure, tooltip)# recompute the ax.dataLim
+        ax.relim()
+        ax.autoscale_view()
         html_content = mpld3.fig_to_html(figure)
         return django.http.HttpResponse(html_content)
-            
-
