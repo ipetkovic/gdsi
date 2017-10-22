@@ -1,5 +1,3 @@
-import datetime
-
 import django
 import pandas
 from matplotlib import pyplot
@@ -7,7 +5,6 @@ import mpld3
 from mpld3.plugins import PointHTMLTooltip
 
 import database_utils as db_utils
-import elo
 
 _CSS = """
 table
@@ -93,46 +90,43 @@ def _append_match_info(database, data_frame, match_id, player_id):
     ]
 
 
-def get_elo_history_request(database, request):
+def get_elo_history_request(database, player_id):
     import ipdb; ipdb.set_trace()
-    player_id = request.GET.get('id')
-    if player_id:
-        player_id = int(player_id)
-        column_names = (
-            u'Datum', u'Protivnik', u'Rezultat', u'ELO prije me\u010da',
-            u'ELO nakon me\u010da', u'Protivnikov ELO prije me\u010da',
-            u'Protivnikov ELO nakon me\u010da'
-        )
+    column_names = (
+        u'Datum', u'Protivnik', u'Rezultat', u'ELO prije me\u010da',
+        u'ELO nakon me\u010da', u'Protivnikov ELO prije me\u010da',
+        u'Protivnikov ELO nakon me\u010da'
+    )
 
-        data_frame = pandas.DataFrame(columns=column_names)
-        labels = []
-        for idx, retval in enumerate(db_utils.iter_player_matches(database,
-                                                                  player_id)):
-            match_id, player_elo = retval
-            match_played = not db_utils.get_match_info(database, match_id,
-                                                       'not_played')
-            if match_played:
-                _append_match_info(database, data_frame, match_id, player_id)
-                label = data_frame.tail(1).T
-                labels.append(label.to_html())
+    data_frame = pandas.DataFrame(columns=column_names)
+    labels = []
+    for idx, retval in enumerate(db_utils.iter_player_matches(database,
+                                                              player_id)):
+        match_id, player_elo = retval
+        match_played = not db_utils.get_match_info(database, match_id,
+                                                   'not_played')
+        if match_played:
+            _append_match_info(database, data_frame, match_id, player_id)
+            label = data_frame.tail(1).T
+            labels.append(label.to_html())
 
-        if _AXES.lines:
-            _AXES.lines.pop()
-            plugins = mpld3.plugins.get_plugins(_FIGURE)
-            plugins.pop(-1)
+    if _AXES.lines:
+        _AXES.lines.pop()
+        plugins = mpld3.plugins.get_plugins(_FIGURE)
+        plugins.pop(-1)
 
-        if len(data_frame):
-            dates = data_frame.ix[:, 0]
-            elos = data_frame.ix[:, 4]
-            points = _AXES.plot(dates, elos, color='b',
-                                markerfacecolor='r', marker='o',
-                                markersize=10)
+    if len(data_frame):
+        dates = data_frame.ix[:, 0]
+        elos = data_frame.ix[:, 4]
+        points = _AXES.plot(dates, elos, color='b',
+                            markerfacecolor='r', marker='o',
+                            markersize=10)
 
-            tooltip = PointHTMLTooltip(points[0], labels, voffset=10,
-                                       hoffset=10, css=_CSS)
-            mpld3.plugins.connect(_FIGURE, tooltip)
-            _AXES.relim()
-            _AXES.autoscale_view()
+        tooltip = PointHTMLTooltip(points[0], labels, voffset=10,
+                                   hoffset=10, css=_CSS)
+        mpld3.plugins.connect(_FIGURE, tooltip)
+        _AXES.relim()
+        _AXES.autoscale_view()
 
     html_content = mpld3.fig_to_html(_FIGURE)
     return django.http.HttpResponse(html_content)

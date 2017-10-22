@@ -27,6 +27,13 @@ class PostForm(django.forms.Form):
         self.fields['player2'] = django.forms.ChoiceField(choices=choices)
 
 
+class elo_history_form(django.forms.Form):
+    def __init__(self, city, *args, **kwargs):
+        super(elo_history_form, self).__init__(*args, **kwargs)
+        choices = _get_choices(city)
+        self.fields['Player'] = django.forms.ChoiceField(choices=choices)
+
+
 def _post_form_upload(request, city):
     if request.method == 'GET':
         form = PostForm(city)
@@ -132,8 +139,25 @@ def get_elo_probs_st(request):
 
 
 def plot_elo_history_zg(request):
-    return elo_history.get_elo_history_request(_DATABASE['ZG'], request)
+    import ipdb; ipdb.set_trace()
+    if request.method == 'GET':
+        form_dict = {'form': elo_history_form('ZG')}
+        return django.shortcuts.render(request, 'elo_calc_zg.html', form_dict)
+    else:
+        form = elo_history_form('ZG', request.POST)
+        if form.is_valid():
+            player_id = int(form.cleaned_data['Player'])
+            return elo_history.get_elo_history_request(_DATABASE['ZG'],
+                                                       player_id)
 
 
 def plot_elo_history_st(request):
-    return elo_history.get_elo_history_request(_DATABASE['ST'], request)
+    if request.method == 'GET':
+        form_dict = {'form': elo_history_form('ST')}
+        return django.shortcuts.render(request, 'elo_calc_st.html', form_dict)
+    else:
+        form = elo_history_form('ST', request.POST)
+        if form.is_valid():
+            player_id = int(form.cleaned_data['Player'])
+            return elo_history.get_elo_history_request(_DATABASE['ST'],
+                                                       player_id)
