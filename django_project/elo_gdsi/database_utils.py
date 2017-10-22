@@ -361,3 +361,15 @@ def get_match_info(database, match_id, key):
     retval = cursor.fetchone()
     if retval:
         return retval[0]
+
+
+def get_num_matches_played(database, player_id):
+    import ipdb; ipdb.set_trace()
+    cursor = database.cursor()
+    cursor.execute((
+        'SELECT count(*) '
+        'from matches '
+        'WHERE (not_played == 0) and '
+        '    (player1_id == ? or player2_id == ?);'
+        ), (player_id, ))
+    return cursor.fetchone()[0]
