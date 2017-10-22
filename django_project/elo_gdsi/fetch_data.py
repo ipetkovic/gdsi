@@ -5,10 +5,12 @@ import json
 import re
 
 import database_utils as db_utils
+import elo
 
 
 _DATE_PATTERN = re.compile('/Date\((\d+)\)/')
-_WSDL_LINK = 'http://tenisliga.com/ws/public.asmx?WSDL'
+_WSDL_ZG_LINK = 'http://tenisliga.com/ws/public.asmx?WSDL'
+_WSDL_ST_LINK = 'http://st.tenisliga.com/ws/public.asmx?WSDL'
 
 
 def _get_players_info(soap_client, player_id_start):
@@ -106,12 +108,54 @@ def _update_matches_table(db, client):
     db.commit()
 
 
+def _create_elo_table(database):
+    if db_utils.elo_table_exists(database):
+        result = db_utils.elo_table_get_max_id(database)
+        start_match_id = result + 1 if result else 0
+    else:
+        db_utils.elo_table_create(database)
+        start_match_id = 0
+
+    # players is dict (keys: player_id) whos values are
+    #   tuple in form (matches_played, current_elo)
+    players = db_utils.elo_table_get_players_data(database)
+    # we want default elo for new player to be _get_start_elo()
+    players.default_factory = lambda: (0, elo.get_start_elo())
+
+    for retval in db_utils.iterate_match_by_date(database, start_match_id):
+        match_id, match_data = retval
+        player1_id = match_data['player1_id']
+        player2_id = match_data['player2_id']
+        player1_matches_num, player1_elo = players[player1_id]
+        player2_matches_num, player2_elo = players[player2_id]
+
+        new_elos = elo.calc_players_elo(player1_matches_num, player1_elo,
+                                        player2_matches_num, player2_elo,
+                                        match_data)
+        player1_elo, player2_elo = new_elos
+
+        match_played = match_data['score'] is not None
+        players[player1_id] = (player1_matches_num + int(match_played),
+                               player1_elo)
+        players[player2_id] = (player2_matches_num + int(match_played),
+                               player2_elo)
+        db_utils.elo_table_insert_row(database, match_id,
+                                      player1_elo, player2_elo)
+    database.commit()
+
+
 def run():
-    soap_client = zeep.Client(wsdl=_WSDL_LINK)
-    db = db_utils.load_database()
-    import ipdb; ipdb.set_trace()
-    _update_player_table(db, soap_client)
-    _update_matches_table(db, soap_client)
+    soap_client_zg = zeep.Client(wsdl=_WSDL_ZG_LINK)
+    db_zg = db_utils.load_database_zg()
+    _update_player_table(db_zg, soap_client_zg)
+    _update_matches_table(db_zg, soap_client_zg)
+    _create_elo_table(db_zg)
+
+    soap_client_st = zeep.Client(wsdl=_WSDL_ST_LINK)
+    db_st = db_utils.load_database_st()
+    _update_player_table(db_st, soap_client_st)
+    _update_matches_table(db_st, soap_client_st)
+    _create_elo_table(db_st)
 
 
 if __name__ == '__main__':

@@ -13,7 +13,10 @@ import mpld3
 
 import unicodecsv
 
-_DATABASE = db_utils.load_database()
+_DATABASE = {
+    'ZG': db_utils.load_database_zg(),
+    'ST': db_utils.load_database_st()
+}
 
 figure, ax = pyplot.subplots()
 
@@ -41,46 +44,60 @@ table, th, td
 """
 
 
-def get_choices():
+def _get_choices(city):
     # you place some logic here
-    return db_utils.players_table_get(_DATABASE)
+    return db_utils.players_table_get(_DATABASE[city])
 
 
 class PostForm(django.forms.Form):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, city, *args, **kwargs):
         super(PostForm, self).__init__(*args, **kwargs)
-        choices = get_choices()
+        choices = _get_choices(city)
         self.fields['player1'] = django.forms.ChoiceField(choices=choices)
         self.fields['player2'] = django.forms.ChoiceField(choices=choices)
 
 
-def post_form_upload(request):
+def _post_form_upload(request, city):
     if request.method == 'GET':
-        form = PostForm()
+        form = PostForm(city)
         form_dict = {'form': form}
-        return django.shortcuts.render(request, 'elo_calc.html', form_dict)
+        if city == 'ZG':
+            template = 'elo_calc_zg.html'
+        else:
+            template = 'elo_calc_st.html'
+
+        return django.shortcuts.render(request, template, form_dict)
     else:
-        form = PostForm(request.POST)
+        form = PostForm(city, request.POST)
         if form.is_valid():
             import ipdb; ipdb.set_trace()
             player1_id = int(form.cleaned_data['player1'])
             player2_id = int(form.cleaned_data['player2'])
-            player1_elo = get_player_elo(_DATABASE, player1_id)
-            player2_elo = get_player_elo(_DATABASE, player2_id)
+            player1_elo = get_player_elo(_DATABASE[city], player1_id)
+            player2_elo = get_player_elo(_DATABASE[city], player2_id)
             player1_coeff, player2_coeff = calc_elo.get_bet_coeffs(player1_elo,
                                                                    player2_elo)
-            response_text = 'Player1,Player2\n%f,%f' % (player1_coeff,
-                                                        player2_coeff)
+            response_text = (
+                'Player1,Player2\n{},{}'
+            ).format(player1_coeff, player2_coeff)
             response = django.http.HttpResponse(response_text,
                                                 content_type='text/plain')
             return response
 
 
-def write_rank_list(request):
+def post_form_upload_zg(request):
+    return _post_form_upload(request, 'ZG')
+
+
+def post_form_upload_st(request):
+    return _post_form_upload(request, 'ST')
+
+
+def _get_rank_list(request, city):
     import ipdb; ipdb.set_trace()
     response = django.http.HttpResponse(content_type='text/plain; charset=utf-8')
     writer = unicodecsv.writer(response)
-    for idx, player_data in enumerate(elo_table_iter_player_by_rank(_DATABASE)):
+    for idx, player_data in enumerate(elo_table_iter_player_by_rank(_DATABASE[city])):
         player_id = player_data[0]
         player_name = player_data[1]
         player_elo = player_data[2]
@@ -89,7 +106,15 @@ def write_rank_list(request):
     return response
 
 
-def elo_probs_request(request):
+def get_rank_list_zg(request):
+    return _get_rank_list(request, 'ZG')
+
+
+def get_rank_list_st(request):
+    return _get_rank_list(request, 'ST')
+
+
+def _get_elo_probs(request, city):
     header = (
         'Player1_Id,Player2_Id,Player1_ELO,Player2_ELO,'
         'Player1_prob,Player2_prob,Player1_odds,Player2_odds'
@@ -102,8 +127,8 @@ def elo_probs_request(request):
     if player1_id and player2_id:
         player1_id = int(player1_id)
         player2_id = int(player2_id)
-        player1_elo = get_player_elo(_DATABASE, player1_id)
-        player2_elo = get_player_elo(_DATABASE, player2_id)
+        player1_elo = get_player_elo(_DATABASE[city], player1_id)
+        player2_elo = get_player_elo(_DATABASE[city], player2_id)
         result = calc_elo.get_win_probs(player1_elo, player2_elo)
         player1_win_prob, player2_win_prob = result
         result = calc_elo.get_bet_coeffs(player1_elo, player2_elo)
@@ -128,8 +153,16 @@ def elo_probs_request(request):
     return response
 
 
+def get_elo_probs_zg(request):
+    return _get_elo_probs(request, 'ZG')
+
+
+def get_elo_probs_st(request):
+    return _get_elo_probs(request, 'ST')
+
+
 def _get_match_result(match_id, player_id):
-    player1_id = get_match_info(_DATABASE, match_id, 'player1_id')
+    player1_id = get_match_info(_DATABASE[city], match_id, 'player1_id')
     if player_id == player1_id:
         player_string = 'player1'
         opponent_string = 'player2'
@@ -137,12 +170,12 @@ def _get_match_result(match_id, player_id):
         player_string = 'player2'
         opponent_string = 'player1'
 
-    player_set1 = get_match_info(_DATABASE, match_id, '%s_set1' % player_string)
-    opponent_set1 = get_match_info(_DATABASE, match_id, '%s_set1' % opponent_string)
-    player_set2 = get_match_info(_DATABASE, match_id, '%s_set2' % player_string)
-    opponent_set2 = get_match_info(_DATABASE, match_id, '%s_set2' % opponent_string)
-    player_set3 = get_match_info(_DATABASE, match_id, '%s_set3' % player_string)
-    opponent_set3 = get_match_info(_DATABASE, match_id, '%s_set3' % opponent_string)
+    player_set1 = get_match_info(_DATABASE[city], match_id, '%s_set1' % player_string)
+    opponent_set1 = get_match_info(_DATABASE[city], match_id, '%s_set1' % opponent_string)
+    player_set2 = get_match_info(_DATABASE[city], match_id, '%s_set2' % player_string)
+    opponent_set2 = get_match_info(_DATABASE[city], match_id, '%s_set2' % opponent_string)
+    player_set3 = get_match_info(_DATABASE[city], match_id, '%s_set3' % player_string)
+    opponent_set3 = get_match_info(_DATABASE[city], match_id, '%s_set3' % opponent_string)
 
     set1 = '%d-%d' % (player_set1, opponent_set1)
     set2 = '%d-%d' % (player_set2, opponent_set2)
@@ -168,22 +201,22 @@ def plot_elo_history(request):
         data_frame = pandas.DataFrame(columns=column_names)
         labels = []
         player_elo_old = 1400
-        for idx, (match_id, elo) in enumerate(iter_player_matches(_DATABASE, player_id)):
-            match_played = not get_match_info(_DATABASE, match_id,
+        for idx, (match_id, elo) in enumerate(iter_player_matches(_DATABASE[city], player_id)):
+            match_played = not get_match_info(_DATABASE[city], match_id,
                                               'not_played')
             if match_played:
-                date_timestamp = get_match_info(_DATABASE, match_id, 'date')
+                date_timestamp = get_match_info(_DATABASE[city], match_id, 'date')
                 date = get_date_from_timestamp(date_timestamp)
 
-                opponent_id = db_utils.get_opponent_id(_DATABASE, match_id,
+                opponent_id = db_utils.get_opponent_id(_DATABASE[city], match_id,
                                                        player_id)
-                opponent_name = db_utils.get_player_name_from_id(_DATABASE,
+                opponent_name = db_utils.get_player_name_from_id(_DATABASE[city],
                                                                  opponent_id)
                 # opponent_name = opponent_name.encode('utf-8')
-                opponent_elo_before = db_utils.get_player_elo_before_match(_DATABASE,
+                opponent_elo_before = db_utils.get_player_elo_before_match(_DATABASE[city],
                                                                            match_id,
                                                                            opponent_id)
-                opponent_elo_after = db_utils.get_player_elo_after_match(_DATABASE,
+                opponent_elo_after = db_utils.get_player_elo_after_match(_DATABASE[city],
                                                                          match_id,
                                                                          opponent_id)
 
@@ -202,7 +235,7 @@ def plot_elo_history(request):
             ax.lines.pop()
             plugins = mpld3.plugins.get_plugins(figure)
             plugins.pop(-1)
-        points = ax.plot(data_frame.ix[:,0], data_frame.ix[:,4], color='b', markerfacecolor='r', marker='o')
+        points = ax.plot(data_frame.ix[:,0], data_frame.ix[:,4], color='b', markerfacecolor='r', marker='o', markersize=10)
 
         tooltip = mpld3.plugins.PointHTMLTooltip(points[0], labels,
                                                  voffset=10, hoffset=10, css=_CSS)

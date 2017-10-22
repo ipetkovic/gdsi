@@ -4,11 +4,18 @@ import datetime
 import sqlite3
 
 
-_DATABASE_NAME = 'gdsi.db'
+_DATABASE_ZG_NAME = 'gdsi_zg.db'
+_DATABASE_ST_NAME = 'gdsi_st.db'
 
 
-def load_database():
-    database_path = os.path.join(os.path.dirname(__file__), _DATABASE_NAME)
+def load_database_zg():
+    database_path = os.path.join(os.path.dirname(__file__), _DATABASE_ZG_NAME)
+    db = sqlite3.Connection(database_path)
+    return db
+
+
+def load_database_st():
+    database_path = os.path.join(os.path.dirname(__file__), _DATABASE_ST_NAME)
     db = sqlite3.Connection(database_path)
     return db
 
