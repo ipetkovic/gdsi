@@ -91,7 +91,6 @@ def _append_match_info(database, data_frame, match_id, player_id):
 
 
 def get_elo_history_request(database, player_id):
-    import ipdb; ipdb.set_trace()
     column_names = (
         u'Datum', u'Protivnik', u'Rezultat', u'ELO prije me\u010da',
         u'ELO nakon me\u010da', u'Protivnikov ELO prije me\u010da',
