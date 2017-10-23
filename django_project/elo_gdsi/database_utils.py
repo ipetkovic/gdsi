@@ -8,6 +8,12 @@ _DATABASE_ZG_NAME = 'gdsi_zg.db'
 _DATABASE_ST_NAME = 'gdsi_st.db'
 
 
+def _table_delete(database, table):
+    cursor = database.cursor()
+    cursor.execute('drop table %s' % table)
+    database.commit()
+
+
 def load_database_zg():
     database_path = os.path.join(os.path.dirname(__file__), _DATABASE_ZG_NAME)
     db = sqlite3.Connection(database_path)
@@ -53,6 +59,10 @@ def players_table_get_max_id(database):
 def players_table_exists(database):
     cursor = database.cursor()
     return _table_exists(cursor, 'players')
+
+
+def players_table_delete(database):
+    _table_delete(database, 'players')
 
 
 def players_table_get(database):
@@ -137,6 +147,10 @@ def matches_table_get_max_id(database):
 def matches_table_exists(database):
     cursor = database.cursor()
     return _table_exists(cursor, 'matches')
+
+
+def matches_table_delete(database):
+    _table_delete(database, 'matches')
 
 
 def iterate_match_by_date(database, start_match_id):
@@ -330,6 +344,10 @@ def elo_table_get_players_data(database):
         players_data[player2_id] = (players_data[player2_id][0] + 1,
                                     player2_elo)
     return players_data
+
+
+def elo_table_delete(database):
+    _table_delete(database, 'elo')
 
 
 def iter_player_matches(database, player_id):

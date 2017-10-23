@@ -17,7 +17,9 @@ def _get_players_info(soap_client, player_id_start):
     return json.loads(soap_client.service.Igrac(player_id_start))
 
 
-def _update_player_table(db, soap_client):
+def _update_player_table(db, soap_client, full_update=False):
+    if full_update and db_utils.players_table_exists(db):
+        db_utils.players_table_delete(db)
     if not db_utils.players_table_exists(db):
         db_utils.players_table_create(db)
         next_id = 0
@@ -96,7 +98,9 @@ def _get_match_data(client, match_id_start):
         match_info = _get_match_info_partial(client, next_id)
 
 
-def _update_matches_table(db, client):
+def _update_matches_table(db, client, full_update=False):
+    if full_update and db_utils.matches_table_exists(db):
+        db_utils.matches_table_delete(db)
     if not db_utils.matches_table_exists(db):
         db_utils.matches_table_create(db)
         next_id = 0
@@ -108,7 +112,9 @@ def _update_matches_table(db, client):
     db.commit()
 
 
-def _create_elo_table(database):
+def _update_elo_table(database, full_update=False):
+    if full_update and db_utils.elo_table_exists(database):
+        db_utils.elo_table_delete(database)
     if db_utils.elo_table_exists(database):
         result = db_utils.elo_table_get_max_id(database)
         start_match_id = result + 1 if result else 0
@@ -144,18 +150,32 @@ def _create_elo_table(database):
     database.commit()
 
 
-def run():
+def run_light():
     soap_client_zg = zeep.Client(wsdl=_WSDL_ZG_LINK)
     db_zg = db_utils.load_database_zg()
     _update_player_table(db_zg, soap_client_zg)
     _update_matches_table(db_zg, soap_client_zg)
-    _create_elo_table(db_zg)
+    _update_elo_table(db_zg)
 
     soap_client_st = zeep.Client(wsdl=_WSDL_ST_LINK)
     db_st = db_utils.load_database_st()
     _update_player_table(db_st, soap_client_st)
     _update_matches_table(db_st, soap_client_st)
-    _create_elo_table(db_st)
+    _update_elo_table(db_st)
+
+
+def run():
+    soap_client_zg = zeep.Client(wsdl=_WSDL_ZG_LINK)
+    db_zg = db_utils.load_database_zg()
+    _update_player_table(db_zg, soap_client_zg, True)
+    _update_matches_table(db_zg, soap_client_zg, True)
+    _update_elo_table(db_zg, True)
+
+    soap_client_st = zeep.Client(wsdl=_WSDL_ST_LINK)
+    db_st = db_utils.load_database_st()
+    _update_player_table(db_st, soap_client_st, True)
+    _update_matches_table(db_st, soap_client_st, True)
+    _update_elo_table(db_st, True)
 
 
 if __name__ == '__main__':
