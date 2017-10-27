@@ -26,6 +26,10 @@ def load_database_st():
     return db
 
 
+def close_database(database):
+    database.close()
+
+
 def get_date_from_timestamp(stamp):
     return datetime.datetime.fromtimestamp(stamp/1000)
 

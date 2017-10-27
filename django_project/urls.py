@@ -1,11 +1,11 @@
-from django.conf.urls import patterns, include, url
+from django.conf.urls import url
 from django.shortcuts import render
 from django.contrib import admin
 import interface
 
 admin.autodiscover()
 
-urlpatterns = patterns('',
+urlpatterns = [
     # Examples:
     # url(r'^$', 'django_project.views.home', name='home'),
     # url(r'^blog/', include('blog.urls')),
@@ -27,4 +27,4 @@ urlpatterns = patterns('',
     url(r'^elo_history_st.html', interface.plot_elo_history_st,
         name='elo_history_st'),
 #    url(r'^admin/', include(admin.site.urls)),
-)
+]

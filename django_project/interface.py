@@ -14,51 +14,59 @@ _DATABASE = {
     'ST': db_utils.load_database_st()
 }
 
+_LOAD_DATABASE = {
+    'ZG': lambda: db_utils.load_database_zg(),
+    'ST': lambda: db_utils.load_database_st()
+}
 
-def _get_choices(city):
-    # you place some logic here
-    return db_utils.players_table_get(_DATABASE[city])
+
+def _get_choices(database):
+    return db_utils.players_table_get(database)
 
 
 class PostForm(django.forms.Form):
-    def __init__(self, city, *args, **kwargs):
+    def __init__(self, database, *args, **kwargs):
         super(PostForm, self).__init__(*args, **kwargs)
-        choices = _get_choices(city)
+        choices = _get_choices(database)
         self.fields['player1'] = django.forms.ChoiceField(choices=choices)
         self.fields['player2'] = django.forms.ChoiceField(choices=choices)
 
 
 class elo_history_form(django.forms.Form):
-    def __init__(self, city, *args, **kwargs):
+    def __init__(self, database, *args, **kwargs):
         super(elo_history_form, self).__init__(*args, **kwargs)
-        choices = _get_choices(city)
+        choices = _get_choices(database)
         self.fields['Player'] = django.forms.ChoiceField(choices=choices)
 
 
 def _post_form_upload(request, city):
+    database = _LOAD_DATABASE[city]()
     if request.method == 'GET':
-        form = PostForm(city)
+        form = PostForm(database)
         form_dict = {'form': form}
         if city == 'ZG':
             template = 'elo_calc_zg.html'
         else:
             template = 'elo_calc_st.html'
 
-        return django.shortcuts.render(request, template, form_dict)
+        response = django.shortcuts.render(request, template, form_dict)
     else:
-        form = PostForm(city, request.POST)
+        form = PostForm(database, request.POST)
         if form.is_valid():
             player1_id = int(form.cleaned_data['player1'])
             player2_id = int(form.cleaned_data['player2'])
-            player1_elo = get_player_elo(_DATABASE[city], player1_id)
-            player2_elo = get_player_elo(_DATABASE[city], player2_id)
+            player1_elo = get_player_elo(database, player1_id)
+            player2_elo = get_player_elo(database, player2_id)
+            db_utils.close_database(database)
             result = elo_gdsi.elo.get_bet_coeffs(player1_elo, player2_elo)
             player1_coeff, player2_coeff = result
             response_text = (
                 'Player1,Player2\n{},{}'
             ).format(player1_coeff, player2_coeff)
             response = HttpResponse(response_text, content_type='text/plain')
-            return response
+
+    db_utils.close_database(database)
+    return response
 
 
 def post_form_upload_zg(request):
@@ -72,13 +80,14 @@ def post_form_upload_st(request):
 def _get_rank_list(request, city):
     response = HttpResponse(content_type='text/plain; charset=utf-8')
     writer = unicodecsv.writer(response)
-    db = _DATABASE[city]
+    db = _LOAD_DATABASE[city]()
     for idx, player_data in enumerate(elo_table_iter_player_by_rank(db)):
         player_id = player_data[0]
         player_name = player_data[1]
         player_elo = player_data[2]
-
         writer.writerow((idx + 1, player_id, player_name, player_elo))
+
+    db_utils.close_database(db)
     return response
 
 
@@ -102,8 +111,10 @@ def _get_elo_probs(request, city):
     if player1_id and player2_id:
         player1_id = int(player1_id)
         player2_id = int(player2_id)
-        player1_elo = get_player_elo(_DATABASE[city], player1_id)
-        player2_elo = get_player_elo(_DATABASE[city], player2_id)
+        database = _LOAD_DATABASE[city]()
+        player1_elo = get_player_elo(database, player1_id)
+        player2_elo = get_player_elo(database, player2_id)
+        db_utils.close_database(database)
         result = elo_gdsi.elo.get_win_probs(player1_elo, player2_elo)
         player1_win_prob, player2_win_prob = result
         result = elo_gdsi.elo.get_bet_coeffs(player1_elo, player2_elo)
@@ -135,25 +146,30 @@ def get_elo_probs_st(request):
     return _get_elo_probs(request, 'ST')
 
 
-def plot_elo_history_zg(request):
+def _plot_elo_history(request, city):
+    template_html = {
+        'ZG': 'elo_history_zg.html',
+        'ST': 'elo_history_st.html'
+    }
+    database = _LOAD_DATABASE[city]()
+
     if request.method == 'GET':
-        form_dict = {'form': elo_history_form('ZG')}
-        return django.shortcuts.render(request, 'elo_history_zg.html', form_dict)
+        form_dict = {'form': elo_history_form(database)}
+        response = django.shortcuts.render(request, template_html[city],
+                                           form_dict)
     else:
-        form = elo_history_form('ZG', request.POST)
+        form = elo_history_form(database, request.POST)
         if form.is_valid():
             player_id = int(form.cleaned_data['Player'])
-            return elo_history.get_elo_history_request(_DATABASE['ZG'],
-                                                       player_id)
+            response = elo_history.get_elo_history_request(database,
+                                                           player_id)
+    db_utils.close_database(database)
+    return response
+
+
+def plot_elo_history_zg(request):
+    return _plot_elo_history(request, 'ZG')
 
 
 def plot_elo_history_st(request):
-    if request.method == 'GET':
-        form_dict = {'form': elo_history_form('ST')}
-        return django.shortcuts.render(request, 'elo_history_st.html', form_dict)
-    else:
-        form = elo_history_form('ST', request.POST)
-        if form.is_valid():
-            player_id = int(form.cleaned_data['Player'])
-            return elo_history.get_elo_history_request(_DATABASE['ST'],
-                                                       player_id)
+    return _plot_elo_history('ST')

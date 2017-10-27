@@ -1,0 +1,86 @@
+{% load static %}
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>ELO history</title>
+
+		<style type="text/css">
+
+		</style>
+	</head>
+	<body>
+<link rel="stylesheet" href="{% static 'highcharts.css' %}" type="text/css"/>
+<script src="{% static 'highcharts/code/highcharts.js' %}"></script>
+<script src="{% static 'highcharts/code/highcharts-more.js' %}"></script>
+<script src="{% static 'highcharts/code/modules/exporting.js' %}"></script>
+
+<div id="container" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+
+
+
+		<script type="text/javascript">
+
+var data = {{elo_data|safe}}
+
+
+Highcharts.chart('container', {
+
+    title: {
+        text: 'ELO history - {{player_name}}'
+    },
+
+    chart: {
+        zoomType: 'x'
+    },
+
+    xAxis: {
+        type: 'datetime'
+    },
+
+    yAxis: {
+        title: {
+            text: null
+        }
+    },
+    tooltip: {
+        useHTML: true,
+        xDateFormat: '%Y-%m-%d',
+        headerFormat: '<table width=350px>',
+        pointFormat: '<tr><th colspan="2"><h3>{point.opponent}</h3></td></tr>' +
+                     '<tr><td>Date:</th><td align="right">{point.x:%Y-%m-%d}</td></tr>' +
+                     '<tr><td>Result:</th><td align="right">{point.result}</td></tr>' +
+                     '<tr><td>ELO before match:</th><td align="right">{point.elo_pre:.0f}</td></tr>' +
+                     '<tr><td>ELO after match:</th><td align="right">{point.y:.0f}</td></tr>' +
+                     '<tr><td>Opponent ELO before match:</th><td align="right">{point.opponent_elo_pre:.0f}</td></tr>' +
+                     '<tr><td>Opponent ELO after match:</th><td align="right">{point.opponent_elo_post:.0f}</td></tr>',
+        footerFormat: '</table>',
+        followPointer: true
+    },
+
+    legend: {
+    },
+
+   plotOptions: {
+        series: {
+            marker: {
+                enabled: true,
+                radius: 4
+            }
+        }
+    },
+
+
+    series: [{
+        name: 'ELO',
+        data: data,
+        zIndex: 1,
+        marker: {
+            fillColor: 'white',
+            lineWidth: 2,
+            lineColor: Highcharts.getOptions().colors[0]
+        }
+    }]
+});
+		</script>
+	</body>
+</html>
