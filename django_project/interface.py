@@ -172,4 +172,4 @@ def plot_elo_history_zg(request):
 
 
 def plot_elo_history_st(request):
-    return _plot_elo_history('ST')
+    return _plot_elo_history(request, 'ST')

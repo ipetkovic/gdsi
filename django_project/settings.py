@@ -22,7 +22,7 @@ SECRET_KEY = 'zNPtNHr1bPiMYy70ejgVl9NSc80CZm5YZKFBSN8QV1SvZWgpaD'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['.fortypi.com']
 
 TEMPLATES = [
     {
@@ -76,16 +76,7 @@ WSGI_APPLICATION = 'django_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.6/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'django',
-        'USER': 'ivo',
-        'PASSWORD': 'i2802989',
-        'HOST': 'localhost',
-        'PORT': '',
-    }
-}
+DATABASES = {}
 
 # Internationalization
 # https://docs.djangoproject.com/en/1.6/topics/i18n/
