@@ -154,9 +154,15 @@ def _plot_elo_history(request, city):
     database = _LOAD_DATABASE[city]()
 
     if request.method == 'GET':
-        form_dict = {'form': elo_history_form(database)}
-        response = django.shortcuts.render(request, template_html[city],
-                                           form_dict)
+        player_id = request.GET.get('id')
+        if player_id is None:
+            form_dict = {'form': elo_history_form(database)}
+            response = django.shortcuts.render(request, template_html[city],
+                                               form_dict)
+        else:
+            player_id = int(player_id)
+            response = elo_history.get_elo_history_request(database,
+                                                           player_id)
     else:
         form = elo_history_form(database, request.POST)
         if form.is_valid():
