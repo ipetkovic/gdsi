@@ -20,9 +20,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 SECRET_KEY = 'zNPtNHr1bPiMYy70ejgVl9NSc80CZm5YZKFBSN8QV1SvZWgpaD'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['.fortypi.com']
+ALLOWED_HOSTS = ['.fortypi.com', '139.59.158.166']
 
 TEMPLATES = [
     {
