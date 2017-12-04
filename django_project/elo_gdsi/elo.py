@@ -16,12 +16,12 @@ def _get_probs_pre(elo1, elo2):
     return (player1_win_prob, 1 - player1_win_prob)
 
 
-def _get_probs_post(match_data):
-    player1_wins = match_data['winner_id'] == match_data['player1_id']
-    flatten_result = sum(match_data['score'], ())
+def _get_probs_post(winner_idx, score):
+    assert (winner_idx == 0 or winner_idx == 1)
+    flatten_result = sum(score, ())
     gems_num = sum(flatten_result)
 
-    if len(match_data['score']) == 3:
+    if len(score) == 3:
         prob_post = 0.5
     elif gems_num < 13:
         prob_post = 1
@@ -43,18 +43,20 @@ def _get_probs_post(match_data):
         prob_post = 0.55
 
     probs_post = (prob_post, 1 - prob_post)
-    if not player1_wins:
+    if winner_idx == 1:
         probs_post = (1 - prob_post, prob_post)
 
     return probs_post
 
 
 def calc_players_elo(player1_matches_num, player1_elo,
-                     player2_matches_num, player2_elo, match_data):
-    if match_data['score']:
+                     player2_matches_num, player2_elo,
+                     score, winner_idx):
+    if score:
         player1_prob_pre, player2_prob_pre = _get_probs_pre(player1_elo,
                                                             player2_elo)
-        player1_prob_post, player2_prob_post = _get_probs_post(match_data)
+        player1_prob_post, player2_prob_post = _get_probs_post(winner_idx,
+                                                               score)
 
         player1_K = max(50, 300 - player1_matches_num * 2.5)
         player2_K = max(50, 300 - player2_matches_num * 2.5)
