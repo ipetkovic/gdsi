@@ -66,96 +66,110 @@ def get_players_doubles_list(database):
     return player_list
 
 
-def _fetch_matches(database, is_doubles):
+def _get_match_data_keys_idx():
+    return {
+        'match_id': 0,
+        'date': 1,
+        'is_winner': 2,
+        'not_played': 3,
+        'player_id': 4,
+        'set1': 5,
+        'set2': 6,
+        'set3': 7
+    }
+
+
+def _is_score_invalid(winner_idx, score):
+    invalid_score = False
+    player1_set_winner = map(lambda x: x[0] > x[1], score)
+    player1_sets_num = player1_set_winner.count(True)
+    player2_sets_num = player1_set_winner.count(False)
+    if winner_idx == 0:
+        invalid_score = player2_sets_num >= player1_sets_num
+    else:
+        invalid_score = player1_sets_num >= player2_sets_num
+
+    if not invalid_score:
+        for match_set in (score[0], score[1]):
+            winner_games = max(match_set)
+            loser_games = min(match_set)
+            games_num = winner_games + loser_games
+            games_diff = winner_games - loser_games
+
+            if (games_num < 6 or games_num > 13 or
+                    games_diff > 6 or (games_diff == 1 and
+                                       winner_games != 7)):
+                invalid_score = True
+                break
+
+    return invalid_score
+
+
+def _form_match_data(rows):
+    keys_idx = _get_match_data_keys_idx()
+    score = None
+    if not rows[0][keys_idx['not_played']]:
+        set1 = (rows[0][keys_idx['set1']],
+                rows[1][keys_idx['set1']])
+        set2 = (rows[0][keys_idx['set2']],
+                rows[1][keys_idx['set2']])
+        set3 = (rows[0][keys_idx['set3']],
+                rows[1][keys_idx['set3']])
+        score = (set1, set2)
+        if set3[0] is not None and set3[1] is not None:
+            score = (set1, set2, set3)
+
+    winner_idx = 0
+    if rows[1][keys_idx['is_winner']]:
+        winner_idx = 1
+
+    if score is not None and _is_score_invalid(winner_idx, score):
+        print(score)
+        score = None
+
+    assert(rows[0][keys_idx['match_id']] ==
+           rows[1][keys_idx['match_id']])
+    assert(rows[0][keys_idx['date']] ==
+           rows[1][keys_idx['date']])
+    assert(not(rows[0][keys_idx['is_winner']] and
+               rows[1][keys_idx['is_winner']]))
+    assert(rows[0][keys_idx['not_played']] ==
+           rows[1][keys_idx['not_played']])
+
+    return {
+        'id': rows[0][keys_idx['match_id']],
+        'date': rows[0][keys_idx['date']],
+        'not_played': rows[0][keys_idx['not_played']],
+        'winner_idx': winner_idx,
+        'player1_id': rows[0][keys_idx['player_id']],
+        'player2_id': rows[1][keys_idx['player_id']],
+        'score': score
+    }
+
+
+def iter_matches(database):
     if table_exists(database, _matches_table):
         cursor = database.cursor()
         cursor.execute("""
-            SELECT match_ext.SusretId, match_ext.Datum, match_ext.NijeOdigran
-            FROM(
-                SELECT x.SusretId, x.Datum, x.NijeOdigran, max(x.IgracId)
-                 AS IgracId
-                 FROM(
-                    SELECT Susret.SusretId, Susret.Datum,
-                           Susret.NijeOdigran, SusretIgrac.IgracId
-                    FROM Susret
-                    INNER JOIN SusretIgrac
-                    ON SusretIgrac.SusretId = Susret.SusretId
-                 ) x
-                 GROUP BY x.SusretId, x.Datum, x.NijeOdigran
-            ) match_ext
-            INNER JOIN Igrac
-            ON match_ext.IgracId = Igrac.IgracId
-            WHERE IgracPar = ?
-            ORDER BY match_ext.Datum ASC, match_ext.SusretId ASC;""",
-                       (is_doubles, ))
-        return cursor.fetchall()
+            SELECT x.*, Igrac.IgracPar
+            FROM (
+                SELECT Susret.SusretId, Susret.Datum,
+                       SusretIgrac.Pobjednik, Susret.NijeOdigran,
+                       SusretIgrac.IgracId, SusretIgrac.Set1,
+                       SusretIgrac.Set2, SusretIgrac.Set3
+                FROM Susret
+                INNER JOIN SusretIgrac ON
+                    SusretIgrac.SusretId = Susret.SusretId
+            ) x
+            INNER JOIN Igrac ON x.IgracId = Igrac.IgracId
+            ORDER BY x.Datum ASC, x.SusretId ASC;""")
 
-
-def _get_match_result(database, match_id, match_played):
-    cursor = database.cursor()
-    if table_exists(database, 'SusretIgrac'):
-        cursor.execute('SELECT * FROM SusretIgrac where SusretId = ?',
-                       (match_id, ))
-        result = cursor.fetchall()
-        assert (len(result) == 2)
-
-        keys = {
-            'match_id': 1,
-            'player_id': 2,
-            'is_winner': 3,
-            'set_1': 4,
-            'set_2': 5,
-            'set_3': 6
-        }
-
-        player_1, player_2 = result
-        winner_idx = 0
-        if player_2[keys['is_winner']]:
-            winner_idx = 1
-
-        score = None
-        if match_played:
-            set1 = (player_1[keys['set_1']], player_2[keys['set_1']])
-            set2 = (player_1[keys['set_2']], player_2[keys['set_2']])
-            set3 = (player_1[keys['set_3']], player_2[keys['set_3']])
-            score = (set1, set2)
-            if set3[0] is not None and set3[1] is not None:
-                score = (set1, set2, set3)
-
-        return {
-            'winner_id': result[winner_idx][keys['player_id']],
-            'player1_id': player_1[keys['player_id']],
-            'player2_id': player_2[keys['player_id']],
-            'score': score
-        }
-
-
-def _iter_matches(database, is_doubles):
-    match_data = _fetch_matches(database, False)
-    import ipdb; ipdb.set_trace()
-    for match in match_data:
-        keys = {
-            'id': 0,
-            'date': 1,
-            'not_played': 2
-        }
-        result = _get_match_result(database, match[keys['id']],
-                                   not match[keys['not_played']])
-        match_data = {
-            'id': match[keys['id']],
-            'date': match[keys['date']],
-            'not_played': match[keys['not_played']]
-        }
-        result.update(match_data)
-        yield result
-
-
-def iter_matches_singles(database):
-    return _iter_matches(database, False)
-
-
-def iter_matches_doubles(database):
-    return _iter_matches(database, True)
+        import ipdb; ipdb.set_trace()
+        rows = cursor.fetchmany(2)
+        while rows:
+            match_data = _form_match_data(rows)
+            yield match_data
+            rows = cursor.fetchmany(2)
 
 
 def elo_table_delete_records(database):
@@ -164,9 +178,10 @@ def elo_table_delete_records(database):
         cursor.execute('DELETE FROM EloPovijest;')
 
 
-def elo_table_insert_row(database, match_id, player_id, elo):
+def elo_table_insert_rows(database, rows):
     cursor = database.cursor()
-    cursor.execute("""
+    cursor.fast_executemany = True
+    cursor.executemany("""
         INSERT INTO EloPovijest
             (SusretId, IgracId, IgracElo)
-        VALUES (?, ?, ?);""", (match_id, player_id, elo))
+        VALUES (?, ?, ?);""", rows)
