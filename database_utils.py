@@ -25,6 +25,10 @@ def load_database_zg():
     return database
 
 
+def commit(database):
+    database.commit()
+
+
 def table_exists(database, name):
     cursor = database.cursor()
     cursor.execute("""
@@ -128,6 +132,7 @@ def _get_match_result(database, match_id, match_played):
 
 def _iter_matches(database, is_doubles):
     match_data = _fetch_matches(database, False)
+    import ipdb; ipdb.set_trace()
     for match in match_data:
         keys = {
             'id': 0,
@@ -141,7 +146,8 @@ def _iter_matches(database, is_doubles):
             'date': match[keys['date']],
             'not_played': match[keys['not_played']]
         }
-        yield result.update(match_data)
+        result.update(match_data)
+        yield result
 
 
 def iter_matches_singles(database):
@@ -150,3 +156,17 @@ def iter_matches_singles(database):
 
 def iter_matches_doubles(database):
     return _iter_matches(database, True)
+
+
+def elo_table_delete_records(database):
+    if table_exists(database, 'EloPovijest'):
+        cursor = database.cursor()
+        cursor.execute('DELETE FROM EloPovijest;')
+
+
+def elo_table_insert_row(database, match_id, player_id, elo):
+    cursor = database.cursor()
+    cursor.execute("""
+        INSERT INTO EloPovijest
+            (SusretId, IgracId, IgracElo)
+        VALUES (?, ?, ?);""", (match_id, player_id, elo))
