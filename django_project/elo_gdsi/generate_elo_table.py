@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from collections import defaultdict
 
 import database_utils as db_utils
