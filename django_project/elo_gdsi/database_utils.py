@@ -1,4 +1,5 @@
 import pyodbc
+import elo
 
 
 _players_table = 'Igrac'
@@ -244,9 +245,13 @@ def get_player_elo(database, player_id):
         INNER JOIN Susret ON EloPovijest.SusretId = Susret.SusretId
         WHERE IgracId = ?
         ORDER BY Datum DESC, Susret.SusretId DESC;""", (player_id, ))
-    elo = float(cursor.fetchone()[0])
+    result = cursor.fetchone()
+    if result:
+        player_elo = float(result[0])
+    else:
+        player_elo = elo.get_start_elo()
 
-    return elo
+    return player_elo
 
 
 def get_elo_table_max_id(database):
