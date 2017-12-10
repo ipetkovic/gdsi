@@ -5,18 +5,19 @@ import unicodecsv
 import elo_gdsi.elo
 from elo_gdsi import database_utils as db_utils
 from elo_gdsi import elo_history
-from elo_gdsi.database_utils import elo_table_get_player_elo as get_player_elo
-from elo_gdsi.database_utils import elo_table_iter_player_by_rank
+from elo_gdsi.database_utils import get_player_elo
+from elo_gdsi.database_utils import iter_player_by_rank_singles
+from elo_gdsi.database_utils import iter_player_by_rank_doubles
 
 
 _DATABASE = {
     'ZG': db_utils.load_database_zg(),
-    'ST': db_utils.load_database_st()
+    'ST': None
 }
 
 _LOAD_DATABASE = {
     'ZG': lambda: db_utils.load_database_zg(),
-    'ST': lambda: db_utils.load_database_st()
+    'ST': lambda: None
 }
 
 
@@ -57,7 +58,6 @@ def _post_form_upload(request, city):
             player2_id = int(form.cleaned_data['player2'])
             player1_elo = get_player_elo(database, player1_id)
             player2_elo = get_player_elo(database, player2_id)
-            db_utils.close_database(database)
             result = elo_gdsi.elo.get_bet_coeffs(player1_elo, player2_elo)
             player1_coeff, player2_coeff = result
             response_text = (
@@ -77,14 +77,19 @@ def post_form_upload_st(request):
     return _post_form_upload(request, 'ST')
 
 
-def _get_rank_list(request, city):
+def _get_rank_list(request, is_doubles, city):
     response = HttpResponse(content_type='text/plain; charset=utf-8')
     writer = unicodecsv.writer(response)
     db = _LOAD_DATABASE[city]()
-    for idx, player_data in enumerate(elo_table_iter_player_by_rank(db)):
+    func = iter_player_by_rank_singles
+    if is_doubles:
+        func = iter_player_by_rank_doubles
+    for idx, player_data in enumerate(func(db)):
         player_id = player_data[0]
         player_name = player_data[1]
-        player_elo = player_data[2]
+        if player_data[2] is not None:
+            player_name = player_data[1] + u' ' + player_data[2]
+        player_elo = player_data[4]
         writer.writerow((idx + 1, player_id, player_name, player_elo))
 
     db_utils.close_database(db)
@@ -92,11 +97,19 @@ def _get_rank_list(request, city):
 
 
 def get_rank_list_zg(request):
-    return _get_rank_list(request, 'ZG')
+    return _get_rank_list(request, False, 'ZG')
+
+
+def get_rank_list_doubles_zg(request):
+    return _get_rank_list(request, True, 'ZG')
 
 
 def get_rank_list_st(request):
-    return _get_rank_list(request, 'ST')
+    return _get_rank_list(request, False, 'ST')
+
+
+def get_rank_list_doubles_st(request):
+    return _get_rank_list(request, True, 'ST')
 
 
 def _get_elo_probs(request, city):

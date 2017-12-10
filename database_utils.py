@@ -1,6 +1,3 @@
-import os.path
-from collections import defaultdict
-import datetime
 import pyodbc
 
 
@@ -21,6 +18,14 @@ def load_database_zg():
     database = pyodbc.connect(DRIVER='{ODBC Driver 13 for SQL Server}',
                               SERVER='mssql3.mojsite.com,1555',
                               DATABASE='dankogr_TenisLiga',
+                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4')
+    return database
+
+
+def load_database_st():
+    database = pyodbc.connect(DRIVER='{ODBC Driver 13 for SQL Server}',
+                              SERVER='mssql3.mojsite.com,1555',
+                              DATABASE='dankogr_TenisLigaST',
                               UID='dankogr_tenisr', PWD='xSjNQNPlGLq4')
     return database
 
@@ -164,7 +169,6 @@ def iter_matches(database):
             INNER JOIN Igrac ON x.IgracId = Igrac.IgracId
             ORDER BY x.Datum ASC, x.SusretId ASC;""")
 
-        import ipdb; ipdb.set_trace()
         rows = cursor.fetchmany(2)
         while rows:
             match_data = _form_match_data(rows)
@@ -185,3 +189,125 @@ def elo_table_insert_rows(database, rows):
         INSERT INTO EloPovijest
             (SusretId, IgracId, IgracElo)
         VALUES (?, ?, ?);""", rows)
+
+
+def get_opponent(database, match_id, player_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT Igrac.IgracId, Igrac.Ime, Igrac.Prezime
+        FROM SusretIgrac
+        INNER JOIN Igrac on SusretIgrac.IgracId = Igrac.IgracId
+        WHERE SusretId = ? and SusretIgrac.IgracId != ?;""",
+                   match_id, player_id)
+
+    opponent = cursor.fetchone()
+    return {'id': opponent[0], 'name': opponent[1] + ' ' + opponent[2]}
+
+
+def players_table_get(database):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT IgracId, Ime + ' ' + Prezime
+        FROM Igrac
+        ORDER BY IME ASC, PREZIME ASC;""")
+    table = cursor.fetchall()
+    return table
+
+
+def get_match_score(database, match_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT Set1, Set2, Set3
+        FROM SusretIgrac
+        WHERE SusretId = ?;""", (match_id, ))
+    rows = cursor.fetchall()
+    assert(len(rows) == 2)
+    set1 = (rows[0][0], rows[1][0])
+    set2 = (rows[0][1], rows[1][1])
+    set3 = (rows[0][2], rows[1][2])
+    score = (set1, set2)
+    if None not in set3:
+        score = (set1, set2, set3)
+
+    return score
+
+
+def get_player_elo(database, player_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT TOP 1 IgracElo
+        FROM EloPovijest
+        INNER JOIN Susret ON EloPovijest.SusretId = Susret.SusretId
+        WHERE IgracId = ?
+        ORDER BY Datum DESC, Susret.SusretId DESC;""", (player_id, ))
+    elo = cursor.execute()
+
+    return elo
+
+
+def get_elo_table_max_id(database):
+    cursor = database.cursor()
+    cursor.execute('select MAX(SusretId) FROM EloPovijest;')
+    return cursor.fetchone()[0]
+
+
+def _iter_player_by_rank(database, is_doubles):
+    max_id = get_elo_table_max_id(database)
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT jaksa.IgracId, jaksa.Ime, jaksa.Prezime, jaksa.SusretId,
+               jaksa.IgracElo
+        FROM (
+            SELECT MAX(mislav.SusretId) as SusretId, IgracId
+            FROM (
+                SELECT frane.IgracId, frane.Datum,
+                       frane.SusretId
+                FROM (
+                    SELECT stipe.IgracId, stipe.Datum, stipe.SusretId
+                    FROM (
+                        SELECT MAX(t.Datum) as Datum, IgracId
+                        FROM (
+                            SELECT *
+                            FROM Susret
+                            WHERE NijeOdigran = 0 AND SusretId <= ?
+                        ) t
+                        INNER JOIN SusretIgrac
+                        ON t.SusretId = SusretIgrac.SusretId
+                        GROUP BY IgracId
+                    ) last
+                    INNER JOIN (
+                        SELECT IgracId, Datum, Susret.SusretID
+                        FROM SusretIgrac
+                        INNER JOIN Susret
+                        ON SusretIgrac.SusretId = Susret.SusretId
+                    ) stipe
+                    ON last.IgracId = stipe.IgracId AND
+                       last.Datum = stipe.Datum
+                ) frane
+                INNER JOIN EloPovijest
+                ON frane.IgracId = EloPovijest.IgracId AND
+                   frane.SusretId = EloPovijest.SusretId
+            ) mislav
+            GROUP BY IgracId
+        ) zvonko
+        INNER JOIN (
+            SELECT Igrac.IgracId, Igrac.Ime, Igrac.Prezime,
+                   EloPovijest.SusretId, IgracElo, IgracPar
+            FROM Igrac
+            INNER JOIN EloPovijest
+            ON Igrac.IgracId = EloPovijest.IgracId
+        ) jaksa
+        ON zvonko.SusretId = jaksa.SusretId AND
+           zvonko.IgracId = jaksa.IgracId
+        WHERE IgracPar = ?
+        ORDER BY jaksa.IgracElo DESC;""", (max_id, is_doubles))
+    for player in cursor:
+        yield player
+
+
+def iter_player_by_rank_singles(database):
+    return _iter_player_by_rank(database, False)
+
+
+def iter_player_by_rank_doubles(database):
+    return _iter_player_by_rank(database, True)

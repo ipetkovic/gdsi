@@ -20,7 +20,11 @@ urlpatterns = [
     url(r'^elo_probs_zg$', interface.get_elo_probs_zg, name='elo_probs_zg'),
     url(r'^elo_probs_st$', interface.get_elo_probs_st, name='elo_probs_st'),
     url(r'^elo_gdsi_zg/', interface.get_rank_list_zg, name='elo_gdsi_zg'),
+    url(r'^elo_gdsi_doubles_zg/', interface.get_rank_list_doubles_zg,
+        name='elo_gdsi_doubles_zg'),
     url(r'^elo_gdsi_st/', interface.get_rank_list_st, name='elo_gdsi_st'),
+    url(r'^elo_gdsi_doubles_st/', interface.get_rank_list_doubles_st,
+        name='elo_gdsi_doubles_st'),
 
     url(r'^elo_history_zg.html', interface.plot_elo_history_zg,
         name='elo_history_zg'),

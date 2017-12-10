@@ -5,14 +5,12 @@ import elo
 
 
 def run():
-    import ipdb; ipdb.set_trace()
     db = db_utils.load_database_zg()
     db_utils.elo_table_delete_records(db)
 
     players = defaultdict(lambda: (0, elo.get_start_elo()))
     elo_table_rows = []
     for match_data in db_utils.iter_matches(db):
-        print match_data
         player1_id = match_data['player1_id']
         player2_id = match_data['player2_id']
         player1_matches_num, player1_elo = players[player1_id]
@@ -39,7 +37,6 @@ def run():
         elo_table_rows.append((match_data['id'], player1_id, player1_elo))
         elo_table_rows.append((match_data['id'], player2_id, player2_elo))
 
-    import ipdb; ipdb.set_trace()
     db_utils.elo_table_insert_rows(db, elo_table_rows)
     db_utils.commit(db)
 
