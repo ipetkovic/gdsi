@@ -11,7 +11,8 @@ def load_database_demo():
     database = pyodbc.connect(DRIVER='{ODBC Driver 13 for SQL Server}',
                               SERVER='mssql3.mojsite.com,1555',
                               DATABASE='dankogr_TenisLigaDemo',
-                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4')
+                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4',
+                              MARS_Connection='Yes')
     return database
 
 
@@ -19,7 +20,8 @@ def load_database_zg():
     database = pyodbc.connect(DRIVER='{ODBC Driver 13 for SQL Server}',
                               SERVER='mssql3.mojsite.com,1555',
                               DATABASE='dankogr_TenisLiga',
-                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4')
+                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4',
+                              MARS_Connection='Yes')
     return database
 
 
@@ -27,7 +29,8 @@ def load_database_st():
     database = pyodbc.connect(DRIVER='{ODBC Driver 13 for SQL Server}',
                               SERVER='mssql3.mojsite.com,1555',
                               DATABASE='dankogr_TenisLigaST',
-                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4')
+                              UID='dankogr_tenisr', PWD='xSjNQNPlGLq4',
+                              MARS_Connection='Yes')
     return database
 
 
@@ -181,6 +184,13 @@ def iter_matches(database):
             rows = cursor.fetchmany(2)
 
 
+def get_match_date(database, match_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT Datum FROM Susret WHERE SusretId = ?;""", (match_id,))
+    return cursor.fetchone()[0]
+
+
 def elo_table_delete_records(database):
     if table_exists(database, 'EloPovijest'):
         cursor = database.cursor()
@@ -196,6 +206,19 @@ def elo_table_insert_rows(database, rows):
         VALUES (?, ?, ?);""", rows)
 
 
+def get_player_name_from_id(database, player_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT Ime, Prezime
+        FROM Igrac
+        WHERE IgracId = ?;""", (player_id, ))
+    name, surname = cursor.fetchone()
+    if surname is not None:
+        name = '%s %s' % (name, surname)
+
+    return name
+
+
 def get_opponent(database, match_id, player_id):
     cursor = database.cursor()
     cursor.execute("""
@@ -206,7 +229,11 @@ def get_opponent(database, match_id, player_id):
                    match_id, player_id)
 
     opponent = cursor.fetchone()
-    return {'id': opponent[0], 'name': opponent[1] + ' ' + opponent[2]}
+    name = opponent[1]
+    if opponent[2]:
+        name = opponent[1] + ' ' + opponent[2]
+
+    return {'id': opponent[0], 'name': name}
 
 
 def players_table_get(database):
@@ -219,20 +246,33 @@ def players_table_get(database):
     return table
 
 
-def get_match_score(database, match_id):
+def get_match_score(database, match_id, player_id=None):
     cursor = database.cursor()
     cursor.execute("""
-        SELECT Set1, Set2, Set3
+        SELECT IgracId, Set1, Set2, Set3
         FROM SusretIgrac
         WHERE SusretId = ?;""", (match_id, ))
     rows = cursor.fetchall()
     assert(len(rows) == 2)
-    set1 = (rows[0][0], rows[1][0])
-    set2 = (rows[0][1], rows[1][1])
-    set3 = (rows[0][2], rows[1][2])
-    score = (set1, set2)
-    if None not in set3:
-        score = (set1, set2, set3)
+
+    first_row = rows[0]
+    second_row = rows[1]
+    if player_id:
+        assert rows[0][0] == player_id or rows[1][0] == player_id
+        if player_id == rows[1][0]:
+            first_row = rows[1]
+            second_row = rows[0]
+
+    set1 = (first_row[1], second_row[1])
+    set2 = (first_row[2], second_row[2])
+    set3 = (first_row[3], second_row[3])
+    score = []
+    if None not in set1:
+        score.append(set1)
+        if None not in set2:
+            score.append(set2)
+            if None not in set3:
+                score.append(set3)
 
     return score
 
@@ -254,10 +294,62 @@ def get_player_elo(database, player_id):
     return player_elo
 
 
+def get_player_elo_before_match(database, match_id, player_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT TOP 1 IgracElo
+        FROM EloPovijest
+        WHERE EloPovijestId < (
+            SELECT EloPovijestId
+            FROM EloPovijest
+            WHERE SusretId = ? AND IgracId = ?
+            ) AND IgracId = 934
+        ORDER BY EloPovijestId DESC;""", (match_id, player_id))
+
+    result = cursor.fetchone()
+    if result is None:
+        player_elo = elo.get_start_elo()
+    else:
+        player_elo = float(result[0])
+
+    return player_elo
+
+
+def get_player_elo_after_match(database, match_id, player_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT IgracElo
+        FROM EloPovijest
+        WHERE SusretId = ? AND IgracId = ?;""", (match_id, player_id))
+
+    result = cursor.fetchone()
+    player_elo = float(result[0])
+
+    return player_elo
+
+
 def get_elo_table_max_id(database):
     cursor = database.cursor()
     cursor.execute('select MAX(SusretId) FROM EloPovijest;')
     return cursor.fetchone()[0]
+
+
+def iter_player_matches(database, player_id):
+    cursor = database.cursor()
+    cursor.execute("""
+        SELECT EloPovijest.SusretId, Datum, IgracElo
+        FROM EloPovijest
+        INNER JOIN Susret
+        ON EloPovijest.SusretId = Susret.SusretId
+        WHERE IgracId = ? AND NijeOdigran = 0;""", (player_id))
+
+    for match_info in cursor:
+        match_data = {
+            'match_id': match_info[0],
+            'date': match_info[1],
+            'player_elo': match_info[2],
+        }
+        yield match_data
 
 
 def _iter_player_by_rank(database, is_doubles):

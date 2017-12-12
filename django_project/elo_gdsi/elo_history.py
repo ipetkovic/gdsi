@@ -1,7 +1,9 @@
 import django
 import pandas
+import datetime
 
 import database_utils as db_utils
+import elo
 
 
 def _data_frame_serialize(data_frame):
@@ -21,60 +23,26 @@ def _data_frame_serialize(data_frame):
 
 
 def _get_match_result(database, match_id, player_id):
-    player1_id = db_utils.get_match_info(database, match_id, 'player1_id')
-    if player_id == player1_id:
-        player_string = 'player1'
-        opponent_string = 'player2'
-    else:
-        player_string = 'player2'
-        opponent_string = 'player1'
+    match_score = db_utils.get_match_score(database, match_id, player_id)
 
-    player_set1 = db_utils.get_match_info(database, match_id,
-                                          '%s_set1' % player_string)
-    opponent_set1 = db_utils.get_match_info(database, match_id,
-                                            '%s_set1' % opponent_string)
-    player_set2 = db_utils.get_match_info(database, match_id,
-                                          '%s_set2' % player_string)
-    opponent_set2 = db_utils.get_match_info(database, match_id,
-                                            '%s_set2' % opponent_string)
-    player_set3 = db_utils.get_match_info(database, match_id,
-                                          '%s_set3' % player_string)
-    opponent_set3 = db_utils.get_match_info(database, match_id,
-                                            '%s_set3' % opponent_string)
-
-    set1 = '%d-%d' % (player_set1, opponent_set1)
-    set2 = '%d-%d' % (player_set2, opponent_set2)
-
-    result = '%s %s' % (set1, set2)
-    if player_set3 and opponent_set3:
-        set3 = '%d-%d' % (player_set3, opponent_set3)
-        result = '%s %s' % (result, set3)
-
-    return result
+    return ' '.join(map(lambda x: '%d-%d' % (x[0], x[1]), match_score))
 
 
-def _append_match_info(database, data_frame, match_id, player_id):
-    date = db_utils.get_match_info(database, match_id, 'date')
-    # date = db_utils.get_date_from_timestamp(date_timestamp)
-
-    player_elo_before = db_utils.get_player_elo_before_match(database,
-                                                             match_id,
-                                                             player_id)
-    player_elo_after = db_utils.get_player_elo_after_match(database,
-                                                           match_id,
-                                                           player_id)
-    opponent_id = db_utils.get_opponent_id(database, match_id, player_id)
-    opponent_name = db_utils.get_player_name_from_id(database, opponent_id)
+def _append_match_info(database, data_frame, match_id,
+                       date, player_id, player_elo_before,
+                       player_elo_after):
+    opponent = db_utils.get_opponent(database, match_id, player_id)
     opponent_elo_before = db_utils.get_player_elo_before_match(database,
                                                                match_id,
-                                                               opponent_id)
+                                                               opponent['id'])
     opponent_elo_after = db_utils.get_player_elo_after_match(database,
                                                              match_id,
-                                                             opponent_id)
+                                                             opponent['id'])
 
     match_result = _get_match_result(database, match_id, player_id)
+    timestamp = (date - datetime.datetime(1970, 1, 1)).total_seconds() * 1000
     data_frame.loc[len(data_frame)] = [
-        date, opponent_name, match_result, player_elo_before,
+        timestamp, opponent['name'], match_result, player_elo_before,
         player_elo_after, opponent_elo_before, opponent_elo_after
     ]
 
@@ -88,15 +56,15 @@ def get_elo_history_request(database, player_id):
 
     data_frame = pandas.DataFrame(columns=column_names)
     labels = []
-    for idx, retval in enumerate(db_utils.iter_player_matches(database,
-                                                              player_id)):
-        match_id, player_elo = retval
-        match_played = not db_utils.get_match_info(database, match_id,
-                                                   'not_played')
-        if match_played:
-            _append_match_info(database, data_frame, match_id, player_id)
-            label = data_frame.tail(1).T
-            labels.append(label.to_html())
+    player_elo_before_match = elo.get_start_elo()
+    for match_info in db_utils.iter_player_matches(database, player_id):
+        _append_match_info(database, data_frame, match_info['match_id'],
+                           match_info['date'],
+                           player_id, player_elo_before_match,
+                           match_info['player_elo'])
+        label = data_frame.tail(1).T
+        labels.append(label.to_html())
+        player_elo_before_match = match_info['player_elo']
 
     template = django.template.loader.get_template('elo_history_graph.html')
     player_name = db_utils.get_player_name_from_id(database, player_id)
