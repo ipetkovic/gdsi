@@ -219,23 +219,6 @@ def get_player_name_from_id(database, player_id):
     return name
 
 
-def get_opponent(database, match_id, player_id):
-    cursor = database.cursor()
-    cursor.execute("""
-        SELECT Igrac.IgracId, Igrac.Ime, Igrac.Prezime
-        FROM SusretIgrac
-        INNER JOIN Igrac on SusretIgrac.IgracId = Igrac.IgracId
-        WHERE SusretId = ? and SusretIgrac.IgracId != ?;""",
-                   match_id, player_id)
-
-    opponent = cursor.fetchone()
-    name = opponent[1]
-    if opponent[2]:
-        name = opponent[1] + ' ' + opponent[2]
-
-    return {'id': opponent[0], 'name': name}
-
-
 def players_table_get(database):
     cursor = database.cursor()
     cursor.execute("""
@@ -285,40 +268,6 @@ def get_player_elo(database, player_id):
         player_elo = float(result[0])
     else:
         player_elo = elo.get_start_elo()
-
-    return player_elo
-
-
-def get_player_elo_before_match(database, match_id, player_id):
-    cursor = database.cursor()
-    cursor.execute("""
-        SELECT TOP 1 IgracElo
-        FROM EloPovijest
-        WHERE EloPovijestId < (
-            SELECT EloPovijestId
-            FROM EloPovijest
-            WHERE SusretId = ? AND IgracId = ?
-            ) AND IgracId = ?
-        ORDER BY EloPovijestId DESC;""", (match_id, player_id, player_id))
-
-    result = cursor.fetchone()
-    if result is None:
-        player_elo = elo.get_start_elo()
-    else:
-        player_elo = float(result[0])
-
-    return player_elo
-
-
-def get_player_elo_after_match(database, match_id, player_id):
-    cursor = database.cursor()
-    cursor.execute("""
-        SELECT IgracElo
-        FROM EloPovijest
-        WHERE SusretId = ? AND IgracId = ?;""", (match_id, player_id))
-
-    result = cursor.fetchone()
-    player_elo = float(result[0])
 
     return player_elo
 
