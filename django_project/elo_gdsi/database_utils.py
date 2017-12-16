@@ -246,26 +246,21 @@ def players_table_get(database):
     return table
 
 
-def get_match_score(database, match_id, player_id=None):
-    cursor = database.cursor()
-    cursor.execute("""
-        SELECT IgracId, Set1, Set2, Set3
-        FROM SusretIgrac
-        WHERE SusretId = ?;""", (match_id, ))
-    rows = cursor.fetchall()
+def _get_match_score(player_id, keys, rows):
     assert(len(rows) == 2)
 
-    first_row = rows[0]
-    second_row = rows[1]
-    if player_id:
-        assert rows[0][0] == player_id or rows[1][0] == player_id
-        if player_id == rows[1][0]:
-            first_row = rows[1]
-            second_row = rows[0]
+    assert (rows[0][keys['player_id']] == player_id or
+            rows[1][keys['player_id']] == player_id)
+    if player_id == rows[0][keys['player_id']]:
+        first_row = rows[0]
+        second_row = rows[1]
+    else:
+        first_row = rows[1]
+        second_row = rows[0]
 
-    set1 = (first_row[1], second_row[1])
-    set2 = (first_row[2], second_row[2])
-    set3 = (first_row[3], second_row[3])
+    set1 = (first_row[keys['set1']], second_row[keys['set1']])
+    set2 = (first_row[keys['set2']], second_row[keys['set2']])
+    set3 = (first_row[keys['set3']], second_row[keys['set3']])
     score = []
     if None not in set1:
         score.append(set1)
@@ -303,8 +298,8 @@ def get_player_elo_before_match(database, match_id, player_id):
             SELECT EloPovijestId
             FROM EloPovijest
             WHERE SusretId = ? AND IgracId = ?
-            ) AND IgracId = 934
-        ORDER BY EloPovijestId DESC;""", (match_id, player_id))
+            ) AND IgracId = ?
+        ORDER BY EloPovijestId DESC;""", (match_id, player_id, player_id))
 
     result = cursor.fetchone()
     if result is None:
@@ -334,22 +329,117 @@ def get_elo_table_max_id(database):
     return cursor.fetchone()[0]
 
 
+def _form_player_match_data(player_id, rows):
+    keys = {
+        'match_id': 0,
+        'date': 1,
+        'player_id': 2,
+        'player_name': 3,
+        'player_surname': 4,
+        'set1': 5,
+        'set2': 6,
+        'set3': 7,
+        'elo_pre': 8,
+        'elo_post': 9,
+        'not_played': 10
+    }
+
+    assert (rows[0][keys['player_id']] == player_id or
+            rows[1][keys['player_id']] == player_id)
+
+    if rows[0][keys['player_id']] == player_id:
+        player_data = rows[0]
+        opponent_data = rows[1]
+    else:
+        player_data = rows[1]
+        opponent_data = rows[0]
+
+    opponent_name = opponent_data[keys['player_name']]
+    opponent_surname = opponent_data[keys['player_surname']]
+    if opponent_surname:
+        opponent_name = '%s %s' % (opponent_name, opponent_surname)
+
+    return {
+        'match_id': player_data[keys['match_id']],
+        'date': player_data[keys['date']],
+        'score': _get_match_score(player_id, keys, rows),
+        'player_elo_pre': player_data[keys['elo_pre']],
+        'player_elo_post': player_data[keys['elo_post']],
+        'opponent_id': opponent_data[keys['player_id']],
+        'opponent_name': opponent_name,
+        'opponent_elo_pre': opponent_data[keys['elo_pre']],
+        'opponent_elo_post': opponent_data[keys['elo_post']],
+        'match_played': not player_data[keys['not_played']]
+    }
+
+
 def iter_player_matches(database, player_id):
     cursor = database.cursor()
     cursor.execute("""
-        SELECT EloPovijest.SusretId, Datum, IgracElo
-        FROM EloPovijest
-        INNER JOIN Susret
-        ON EloPovijest.SusretId = Susret.SusretId
-        WHERE IgracId = ? AND NijeOdigran = 0;""", (player_id))
+        WITH
+            MATCH AS (
+                SELECT EloPovijest.SusretId,
+                       Datum,
+                       IgracId,
+                       IgracElo,
+                       NijeOdigran
+                FROM EloPovijest
+                INNER JOIN Susret
+                ON EloPovijest.SusretId = Susret.SusretId
+            ),
 
-    for match_info in cursor:
-        match_data = {
-            'match_id': match_info[0],
-            'date': match_info[1],
-            'player_elo': match_info[2],
-        }
+            CTE AS (
+                SELECT ROW_NUMBER()
+                    OVER (
+                        PARTITION BY IgracId
+                        ORDER BY Datum ASC, SusretId ASC
+                    ) AS Rnr,
+                    SusretId,
+                    Datum,
+                    IgracId,
+                    IgracElo,
+                    NijeOdigran
+                FROM MATCH
+            ),
+
+            MERGED AS (
+                SELECT cur.SusretId,
+                       cur.Datum,
+                       cur.IgracId,
+                       Igrac.Ime,
+                       Igrac.Prezime,
+                       SusretIgrac.Set1,
+                       SusretIgrac.Set2,
+                       SusretIgrac.Set3,
+                       COALESCE(prev.IgracElo, 1400) AS IgracEloPrijeMeca,
+                       cur.IgracElo AS IgracEloNakonMeca,
+                       cur.NijeOdigran
+                FROM CTE AS cur
+                LEFT JOIN CTE AS prev
+                ON prev.IgracId = cur.IgracId AND prev.Rnr = cur.Rnr - 1
+                INNER JOIN Igrac
+                ON cur.IgracId = Igrac.IgracId
+                INNER JOIN SusretIgrac
+                ON cur.IgracId = SusretIgrac.IgracId AND
+                   cur.SusretId = SusretIgrac.SusretId
+            )
+
+        SELECT mrgd.*
+        FROM (
+            SELECT cur.SusretId
+            FROM MERGED AS cur
+            WHERE cur.IgracId = ?
+        ) player_matches
+        INNER JOIN
+        MERGED as mrgd
+        ON player_matches.SusretId = mrgd.SusretId
+        ORDER BY mrgd.Datum ASC, mrgd.SusretId ASC""", (player_id, ))
+
+    rows = cursor.fetchmany(2)
+    while rows:
+        match_data = _form_player_match_data(player_id, rows)
         yield match_data
+        rows = cursor.fetchmany(2)
 
 
 def _iter_player_by_rank(database, is_doubles):
