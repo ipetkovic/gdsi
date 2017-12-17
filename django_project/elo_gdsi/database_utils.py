@@ -53,32 +53,6 @@ def table_exists(database, name):
     return len(cursor.fetchall())
 
 
-def get_players_singles_list(database):
-    player_list = tuple()
-    if table_exists(database, _players_table):
-        cursor = database.cursor()
-        cursor.execute("""
-            SELECT IgracId, Ime + ' ' + Prezime
-            FROM Igrac
-            WHERE IgracPar = 0; """)
-        player_list = cursor.fetchall()
-
-    return player_list
-
-
-def get_players_doubles_list(database):
-    player_list = tuple()
-    if table_exists(database, _players_table):
-        cursor = database.cursor()
-        cursor.execute("""
-            SELECT IgracId, Ime + ' ' + Prezime
-            FROM Igrac
-            WHERE IgracPar = 1; """)
-        player_list = cursor.fetchall()
-
-    return player_list
-
-
 def _get_match_data_keys_idx():
     return {
         'match_id': 0,
@@ -182,13 +156,6 @@ def iter_matches(database):
             match_data = _form_match_data(rows)
             yield match_data
             rows = cursor.fetchmany(2)
-
-
-def get_match_date(database, match_id):
-    cursor = database.cursor()
-    cursor.execute("""
-        SELECT Datum FROM Susret WHERE SusretId = ?;""", (match_id,))
-    return cursor.fetchone()[0]
 
 
 def elo_table_delete_records(database):
@@ -391,63 +358,57 @@ def iter_player_matches(database, player_id):
         rows = cursor.fetchmany(2)
 
 
-def _iter_player_by_rank(database, is_doubles):
+def _get_players_by_rank(database, is_doubles):
     max_id = get_elo_table_max_id(database)
     cursor = database.cursor()
     cursor.execute("""
-        SELECT jaksa.IgracId, jaksa.Ime, jaksa.Prezime, jaksa.SusretId,
-               jaksa.IgracElo
-        FROM (
-            SELECT MAX(mislav.SusretId) as SusretId, IgracId
-            FROM (
-                SELECT frane.IgracId, frane.Datum,
-                       frane.SusretId
-                FROM (
-                    SELECT stipe.IgracId, stipe.Datum, stipe.SusretId
-                    FROM (
-                        SELECT MAX(t.Datum) as Datum, IgracId
-                        FROM (
-                            SELECT *
-                            FROM Susret
-                            WHERE NijeOdigran = 0 AND SusretId <= ?
-                        ) t
-                        INNER JOIN SusretIgrac
-                        ON t.SusretId = SusretIgrac.SusretId
-                        GROUP BY IgracId
-                    ) last
-                    INNER JOIN (
-                        SELECT IgracId, Datum, Susret.SusretID
-                        FROM SusretIgrac
-                        INNER JOIN Susret
-                        ON SusretIgrac.SusretId = Susret.SusretId
-                    ) stipe
-                    ON last.IgracId = stipe.IgracId AND
-                       last.Datum = stipe.Datum
-                ) frane
-                INNER JOIN EloPovijest
-                ON frane.IgracId = EloPovijest.IgracId AND
-                   frane.SusretId = EloPovijest.SusretId
-            ) mislav
-            GROUP BY IgracId
-        ) zvonko
+        WITH
+            match_data AS (
+                SELECT ROW_NUMBER() OVER (
+                    PARTITION BY EloPovijest.IgracId
+                    ORDER BY Datum ASC, EloPovijest.SusretId ASC
+                    ) AS Rnr,
+                    EloPovijest.IgracId,
+                    CASE WHEN Ime IS NULL AND Prezime IS NULL
+                         THEN ''
+                         WHEN Ime IS NOT NULL AND Prezime IS NULL
+                         THEN Ime
+                         WHEN Ime IS NULL AND Prezime IS NOT NULL
+                         THEN Prezime
+                         WHEN Ime IS NOT NULL AND Prezime IS NOT NULL
+                         THEN Ime + ' ' + Prezime
+                    END AS Ime,
+                    IgracElo
+                FROM EloPovijest
+                INNER JOIN Susret ON EloPovijest.SusretId = Susret.SusretId
+                INNER JOIN Igrac ON EloPovijest.IgracId = Igrac.IgracId
+                WHERE NijeOdigran = 0 AND
+                      Susret.SusretId <= ? AND
+                      IgracPar = ?
+            )
+
+        SELECT ROW_NUMBER() OVER (
+            ORDER BY IgracElo DESC
+            ) AS idx,
+            all_matches.IgracId,
+            Ime,
+            IgracElo
+        FROM match_data AS all_matches
         INNER JOIN (
-            SELECT Igrac.IgracId, Igrac.Ime, Igrac.Prezime,
-                   EloPovijest.SusretId, IgracElo, IgracPar
-            FROM Igrac
-            INNER JOIN EloPovijest
-            ON Igrac.IgracId = EloPovijest.IgracId
-        ) jaksa
-        ON zvonko.SusretId = jaksa.SusretId AND
-           zvonko.IgracId = jaksa.IgracId
-        WHERE IgracPar = ?
-        ORDER BY jaksa.IgracElo DESC;""", (max_id, is_doubles))
-    for player in cursor:
-        yield player
+            SELECT MAX(match_data.Rnr) as Rnr, IgracId
+            FROM match_data
+            GROUP BY IgracId
+        ) AS last_match
+        ON all_matches.Rnr = last_match.Rnr AND
+           all_matches.IgracId = last_match.IgracId
+        ORDER BY idx ASC;""", (max_id, is_doubles))
+
+    return cursor.fetchall()
 
 
-def iter_player_by_rank_singles(database):
-    return _iter_player_by_rank(database, False)
+def get_players_by_rank_singles(database):
+    return _get_players_by_rank(database, False)
 
 
-def iter_player_by_rank_doubles(database):
-    return _iter_player_by_rank(database, True)
+def get_players_by_rank_doubles(database):
+    return _get_players_by_rank(database, True)

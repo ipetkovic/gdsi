@@ -41,6 +41,7 @@ def run():
 
     db_utils.elo_table_insert_rows(db, elo_table_rows)
     db_utils.commit(db)
+    db_utils.close_database(db)
 
 if __name__ == '__main__':
     run()

@@ -6,8 +6,8 @@ import elo_gdsi.elo
 from elo_gdsi import database_utils as db_utils
 from elo_gdsi import elo_history
 from elo_gdsi.database_utils import get_player_elo
-from elo_gdsi.database_utils import iter_player_by_rank_singles
-from elo_gdsi.database_utils import iter_player_by_rank_doubles
+from elo_gdsi.database_utils import get_players_by_rank_singles
+from elo_gdsi.database_utils import get_players_by_rank_doubles
 
 
 _DATABASE = {
@@ -81,18 +81,13 @@ def _get_rank_list(request, is_doubles, city):
     response = HttpResponse(content_type='text/plain; charset=utf-8')
     writer = unicodecsv.writer(response)
     db = _LOAD_DATABASE[city]()
-    func = iter_player_by_rank_singles
     if is_doubles:
-        func = iter_player_by_rank_doubles
-    for idx, player_data in enumerate(func(db)):
-        player_id = player_data[0]
-        player_name = player_data[1]
-        if player_data[2] is not None:
-            player_name = player_data[1] + u' ' + player_data[2]
-        player_elo = player_data[4]
-        writer.writerow((idx + 1, player_id, player_name, player_elo))
-
+        rows = get_players_by_rank_doubles(db)
+    else:
+        rows = get_players_by_rank_singles(db)
     db_utils.close_database(db)
+    writer.writerows(rows)
+
     return response
 
 

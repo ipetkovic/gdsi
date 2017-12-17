@@ -66,6 +66,7 @@ def get_elo_history_request(database, player_id):
 
     template = django.template.loader.get_template('elo_history_graph.html')
     player_name = db_utils.get_player_name_from_id(database, player_id)
+    player_name = u'{} (id={})'.format(player_name, player_id)
     render_data = {
         'elo_data': _data_frame_serialize(data_frame),
         'player_name': player_name.encode('utf-8')
