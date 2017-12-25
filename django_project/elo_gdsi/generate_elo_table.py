@@ -6,8 +6,7 @@ import database_utils as db_utils
 import elo
 
 
-def run():
-    db = db_utils.load_database_zg()
+def _generate_elo_table(db):
     db_utils.elo_table_delete_records(db)
 
     players = defaultdict(lambda: (0, elo.get_start_elo()))
@@ -41,6 +40,17 @@ def run():
 
     db_utils.elo_table_insert_rows(db, elo_table_rows)
     db_utils.commit(db)
+
+
+def run():
+    print('Generating ELO table for ZG...')
+    db = db_utils.load_database_zg()
+    _generate_elo_table(db)
+    db_utils.close_database(db)
+
+    print('Generating ELO table for ST...')
+    db = db_utils.load_database_st()
+    _generate_elo_table(db)
     db_utils.close_database(db)
 
 if __name__ == '__main__':

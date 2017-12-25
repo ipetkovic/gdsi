@@ -10,14 +10,9 @@ from elo_gdsi.database_utils import get_players_by_rank_singles
 from elo_gdsi.database_utils import get_players_by_rank_doubles
 
 
-_DATABASE = {
-    'ZG': db_utils.load_database_zg(),
-    'ST': None
-}
-
 _LOAD_DATABASE = {
     'ZG': lambda: db_utils.load_database_zg(),
-    'ST': lambda: None
+    'ST': lambda: db_utils.load_database_st()
 }
 
 
