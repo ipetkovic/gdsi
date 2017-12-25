@@ -37,14 +37,14 @@ def _append_match_info(database, data_frame, match_id,
                                 match_score))
     timestamp = (date - datetime.datetime(1970, 1, 1)).total_seconds() * 1000
     data_frame.loc[len(data_frame)] = [
-        timestamp, opponent_name, match_result, player_elo_before,
+        timestamp, opponent_name, opponent_id, match_result, player_elo_before,
         player_elo_after, opponent_elo_before, opponent_elo_after
     ]
 
 
 def get_elo_history_request(database, player_id):
     column_names = (
-        u'x', u'opponent', u'result', u'elo_pre',
+        u'x', u'opponent', u'opponent_id', u'result', u'elo_pre',
         u'y', u'opponent_elo_pre',
         u'opponent_elo_post'
     )
