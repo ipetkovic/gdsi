@@ -137,6 +137,8 @@ def _form_match_data(rows):
 def iter_matches(database):
     if table_exists(database, _matches_table):
         cursor = database.cursor()
+
+        # SezonaId == 7 -> friendly match
         cursor.execute("""
             SELECT x.*, Igrac.IgracPar
             FROM (
@@ -147,6 +149,7 @@ def iter_matches(database):
                 FROM Susret
                 INNER JOIN SusretIgrac ON
                     SusretIgrac.SusretId = Susret.SusretId
+                WHERE SezonaId != 7
             ) x
             INNER JOIN Igrac ON x.IgracId = Igrac.IgracId
             ORDER BY x.Datum ASC, x.SusretId ASC;""")
