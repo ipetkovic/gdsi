@@ -26,7 +26,7 @@ var data = {{elo_data|safe}}
 Highcharts.chart('container', {
 
     title: {
-        text: 'ELO history - {{player_name}}'
+        text: 'ELO history - {{player_name}} ({{player_elo}})'
     },
 
     chart: {
@@ -47,13 +47,14 @@ Highcharts.chart('container', {
         xDateFormat: '%Y-%m-%d',
         headerFormat: '<table width=350px>',
         pointFormat: '<tr><th colspan="2"><h3>{point.opponent}</h3></td></tr>' +
-                     '<tr><td>Date:</th><td align="right">{point.x:%Y-%m-%d}</td></tr>' +
-                     '<tr><td>Opponent ID:</th><td align="right">{point.opponent_id:.0f}</td></tr>' +
-                     '<tr><td>Result:</th><td align="right">{point.result}</td></tr>' +
-                     '<tr><td>ELO before match:</th><td align="right">{point.elo_pre:.0f}</td></tr>' +
-                     '<tr><td>ELO after match:</th><td align="right">{point.y:.0f}</td></tr>' +
-                     '<tr><td>Opponent ELO before match:</th><td align="right">{point.opponent_elo_pre:.0f}</td></tr>' +
-                     '<tr><td>Opponent ELO after match:</th><td align="right">{point.opponent_elo_post:.0f}</td></tr>',
+                     '<tr><th colspan="2"><h3>{point.y:.0f}</h3></td></tr>'  +
+                     '<tr><td>Datum:</th><td align="right">{point.x:%Y-%m-%d}</td></tr>' +
+                     '<tr><td>Protivnikov ID:</th><td align="right">{point.opponent_id:.0f}</td></tr>' +
+                     '<tr><td>Rezultat:</th><td align="right">{point.result}</td></tr>' +
+                     '<tr><td>ELO prije susreta:</th><td align="right">{point.elo_pre:.0f}</td></tr>' +
+                     '<tr><td>ELO nakon susreta:</th><td align="right">{point.y:.0f}</td></tr>' +
+                     '<tr><td>Protivnikov ELO prije susreta:</th><td align="right">{point.opponent_elo_pre:.0f}</td></tr>' +
+                     '<tr><td>Protivnikov ELO nakon susreta:</th><td align="right">{point.opponent_elo_post:.0f}</td></tr>',
         footerFormat: '</table>',
         followPointer: true
     },

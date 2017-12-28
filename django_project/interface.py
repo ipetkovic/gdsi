@@ -32,7 +32,7 @@ class elo_history_form(django.forms.Form):
     def __init__(self, database, *args, **kwargs):
         super(elo_history_form, self).__init__(*args, **kwargs)
         choices = _get_choices(database)
-        self.fields['Player'] = django.forms.ChoiceField(choices=choices)
+        self.fields['id'] = django.forms.ChoiceField(choices=choices)
 
 
 def _post_form_upload(request, city):
@@ -164,12 +164,6 @@ def _plot_elo_history(request, city):
                                                form_dict)
         else:
             player_id = int(player_id)
-            response = elo_history.get_elo_history_request(database,
-                                                           player_id)
-    else:
-        form = elo_history_form(database, request.POST)
-        if form.is_valid():
-            player_id = int(form.cleaned_data['Player'])
             response = elo_history.get_elo_history_request(database,
                                                            player_id)
     db_utils.close_database(database)
