@@ -69,7 +69,7 @@ def get_elo_history_request(database, player_id):
     render_data = {
         'elo_data': _data_frame_serialize(data_frame),
         'player_name': player_name.encode('utf-8'),
-        'player_elo': int(data_frame.y.iloc[-1])
+        'player_elo': data_frame.y.iloc[-1]
     }
     html_content = template.render(render_data)
     return django.http.HttpResponse(html_content)

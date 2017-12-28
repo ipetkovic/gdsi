@@ -26,7 +26,7 @@ var data = {{elo_data|safe}}
 Highcharts.chart('container', {
 
     title: {
-        text: 'ELO history - {{player_name}} ({{player_elo}})'
+        text: 'ELO history - {{player_name}} ({{player_elo|floatformat:"0"}})'
     },
 
     chart: {
